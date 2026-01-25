@@ -109,7 +109,7 @@ class ThreeDPageState extends State<ThreeDPage> {
         // 获取已连接的设备列表
         List<BluetoothDevice> connectedDevices = [];
         try {
-          connectedDevices = await FlutterBluePlus.connectedDevices;
+          connectedDevices = FlutterBluePlus.connectedDevices;
         } catch (e) {
           print('获取已连接设备列表时出错: $e');
         }
@@ -120,7 +120,7 @@ class ThreeDPageState extends State<ThreeDPage> {
             _isBluetoothConnected = true;
             _deviceName = connectedDevices.first.name.isEmpty ? '未知设备' : connectedDevices.first.name;
           });
-          print('实际检测到已连接的设备: ${_deviceName}');
+          print('实际检测到已连接的设备: $_deviceName');
         } else {
           // 实际没有设备连接，更新状态
           setState(() {

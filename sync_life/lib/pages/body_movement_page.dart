@@ -183,7 +183,7 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 16),
-                      Container(
+                      SizedBox(
                         height: 200, // Set fixed height for the posture distribution
                         child: SingleChildScrollView(
                           child: _buildPostureData(),
@@ -218,7 +218,7 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 20),
-                      Container(
+                      SizedBox(
                         height: 200,
                         child: _buildActivityChart(),
                       ),
@@ -251,7 +251,7 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 16),
-                      Container(
+                      SizedBox(
                         height: 200, // Set fixed height for the posture angle monitoring
                         child: SingleChildScrollView(
                           child: _buildPostureAngleData(),
@@ -422,7 +422,7 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
             margin: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
               children: [
-                Container(
+                SizedBox(
                   width: 100,
                   child: Text(posture['time'], style: const TextStyle(fontSize: 12)),
                 ),
@@ -534,7 +534,7 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
             margin: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
               children: [
-                Container(
+                SizedBox(
                   width: 100,
                   child: Text(angle['time'], style: const TextStyle(fontSize: 12)),
                 ),

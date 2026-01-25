@@ -1,0 +1,96 @@
+Flutter crash report.
+Please report a bug at https://github.com/flutter/flutter/issues.
+
+## command
+
+flutter run -d chrome
+
+## exception
+
+ProcessException: ProcessException: 应用程序无法启动，因为应用程序的并行配置不正确。有关详细信息，请参阅应用程序事件日志，或使用命令行 sxstrace.exe 工具。 (at ../../runtime/bin/process_win.cc:556)
+  Command: C:\Users\Lenovo\AppData\Local\Google\Chrome\Application\chrome.exe --user-data-dir=C:\Users\Lenovo\AppData\Local\Temp\flutter_tools.4187cb96\flutter_tools_chrome_device.afd00f5f --remote-debugging-port=55712 --disable-background-timer-throttling --disable-extensions --disable-popup-blocking --bwsi --no-first-run --no-default-browser-check --disable-default-apps --disable-translate --disable-search-engine-choice-screen http://localhost:63538
+
+```
+#0      _ProcessImpl._start (dart:io-patch/process_patch.dart:421:33)
+#1      Process.start (dart:io-patch/process_patch.dart:42:20)
+#2      LocalProcessManager.start (package:process/src/interface/local_process_manager.dart:42:22)
+#3      ErrorHandlingProcessManager.start.<anonymous closure> (package:flutter_tools/src/base/error_handling_io.dart:654:26)
+#4      _run (package:flutter_tools/src/base/error_handling_io.dart:514:20)
+#5      ErrorHandlingProcessManager.start (package:flutter_tools/src/base/error_handling_io.dart:652:12)
+#6      ChromiumLauncher._spawnChromiumProcess (package:flutter_tools/src/web/chrome.dart:308:53)
+#7      ChromiumLauncher.launch (package:flutter_tools/src/web/chrome.dart:259:35)
+<asynchronous suspension>
+#8      ChromiumDevice.startApp (package:flutter_tools/src/web/web_device.dart:140:17)
+<asynchronous suspension>
+#9      ResidentWebRunner.run.<anonymous closure> (package:flutter_tools/src/isolated/resident_web_runner.dart:359:9)
+<asynchronous suspension>
+#10     asyncGuard.<anonymous closure> (package:flutter_tools/src/base/async_guard.dart:108:24)
+<asynchronous suspension>
+```
+
+## flutter doctor
+
+```
+[32m[✓][39m Flutter (Channel stable, 3.38.6, on Microsoft
+    Windows [版本 10.0.26200.7462], locale zh-CN) [931ms]
+    [32m•[39m Flutter version 3.38.6 on channel stable at
+      D:\Flutter SDK\flutter
+    [32m•[39m Upstream repository
+      https://github.com/flutter/flutter.git
+    [32m•[39m Framework revision 8b87286849 (11 days ago),
+      2026-01-08 10:49:17 -0800
+    [32m•[39m Engine revision 78fc3012e4
+    [32m•[39m Dart version 3.10.7
+    [32m•[39m DevTools version 2.51.1
+    [32m•[39m Feature flags: enable-web, enable-linux-desktop,
+      enable-macos-desktop, enable-windows-desktop,
+      enable-android, enable-ios, cli-animations,
+      enable-native-assets, omit-legacy-version-file,
+      enable-lldb-debugging
+
+[32m[✓][39m Windows Version (11 家庭中文版 64-bit, 25H2, 2009)
+    [2.7s]
+
+[32m[✓][39m Android toolchain - develop for Android devices
+    (Android SDK version 36.1.0) [2.6s]
+    [32m•[39m Android SDK at D:\AndroidSDK
+    [32m•[39m Emulator version 36.3.10.0 (build_id 14472402)
+      (CL:N/A)
+    [32m•[39m Platform android-36, build-tools 36.1.0
+    [32m•[39m Java binary at: D:\Android Studio\jbr\bin\java
+      This is the JDK bundled with the latest Android
+      Studio installation on this machine.
+      To manually set the JDK path, use: `flutter
+      config --jdk-dir="path/to/jdk"`.
+    [32m•[39m Java version OpenJDK Runtime Environment (build
+      21.0.8+-14196175-b1038.72)
+    [32m•[39m All Android licenses accepted.
+
+[32m[✓][39m Chrome - develop for the web [496ms]
+    [32m•[39m Chrome at
+      C:\Users\Lenovo\AppData\Local\Google\Chrome\Appli
+      cation\chrome.exe
+
+[32m[✓][39m Visual Studio - develop Windows apps (Visual Studio
+    Community 2026 18.2.0) [495ms]
+    [32m•[39m Visual Studio at D:\Visual Studio Community
+    [32m•[39m Visual Studio Community 2026 version
+      18.2.11408.102
+    [32m•[39m Windows 10 SDK version 10.0.26100.0
+
+[32m[✓][39m Connected device (4 available) [921ms]
+    [32m•[39m 21091116C (mobile) • vobeemee7h7lq8qk •
+      android-arm64  • Android 13 (API 33)
+    [32m•[39m Windows (desktop)  • windows          •
+      windows-x64    • Microsoft Windows [版本
+      10.0.26200.7462]
+    [32m•[39m Chrome (web)       • chrome           •
+      web-javascript • unknown
+    [32m•[39m Edge (web)         • edge             •
+      web-javascript • Microsoft Edge 142.0.3595.90
+
+[32m[✓][39m Network resources [1,178ms]
+    [32m•[39m All expected network resources are available.
+
+[32m•[39m No issues found!
+```

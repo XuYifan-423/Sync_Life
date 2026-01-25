@@ -104,7 +104,7 @@ class MainScreenState extends State<MainScreen> {
           onGenerateReport: (reportType) {
             // 切换到智能服务页面并传递初始消息
             setState(() {
-              _smartAgentInitialMessage = '生成${reportType}';
+              _smartAgentInitialMessage = '生成$reportType';
               _currentIndex = 1; // 智能服务页面的索引
             });
           },
@@ -130,7 +130,7 @@ class MainScreenState extends State<MainScreen> {
         currentPage = BodyMovementPage(
           onGenerateReport: (reportType) {
             setState(() {
-              _smartAgentInitialMessage = '生成${reportType}';
+              _smartAgentInitialMessage = '生成$reportType';
               _currentIndex = 1;
             });
           },

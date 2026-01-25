@@ -90,7 +90,7 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
       
       if (isBluetoothOn) {
         // 获取已连接的设备列表
-        List<BluetoothDevice> connectedDevices = await FlutterBluePlus.connectedDevices;
+        List<BluetoothDevice> connectedDevices = FlutterBluePlus.connectedDevices;
         if (connectedDevices.isNotEmpty) {
           // 更新连接状态
           if (mounted) {
@@ -422,7 +422,7 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
     // 获取已连接的设备列表
     List<BluetoothDevice> connectedDevices = [];
     try {
-      connectedDevices = await FlutterBluePlus.connectedDevices;
+      connectedDevices = FlutterBluePlus.connectedDevices;
     } catch (e) {
       print('获取已连接设备列表时出错: $e');
     }
