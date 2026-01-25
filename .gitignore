@@ -22,6 +22,18 @@ sync_life/**/node_modules/
 *.swp
 *.swo
 *~
+__pycache__/
+*.pyc
+
+# Flutter缓存
+.dart_tool/
+
+# 数据库文件
+*.sqlite3
+*.db
+
+# 临时脚本
+check_db.py
 
 # 操作系统文件
 .DS_Store
