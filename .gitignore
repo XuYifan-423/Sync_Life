@@ -1,3 +1,28 @@
+# 虚拟环境
 server/.venv/
+server/venv/
+
+# 构建文件
 sync_life/build/
+sync_life/android/
+
+# 大文件目录
 server/Human+clothes/
+
+# Unity相关文件
+sync_life/**/unityLibrary/
+sync_life/**/*.assets
+
+# 依赖包
+sync_life/**/pods/
+sync_life/**/node_modules/
+
+# 缓存文件
+*.log
+*.swp
+*.swo
+*~
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
