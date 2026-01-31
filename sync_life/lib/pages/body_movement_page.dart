@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'dart:math';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:sync_life/config/api_config.dart';
 
 // 时间范围
 enum TimeRange { day, week, month }
@@ -14,105 +18,49 @@ class BodyMovementPage extends StatefulWidget {
 
 class _BodyMovementPageState extends State<BodyMovementPage> {
   TimeRange _selectedRange = TimeRange.day;
+  Map<String, dynamic>? _bodyMovementData;
+  bool _isLoading = false;
+  String? _error;
 
-  // 模拟数据
-  final Map<TimeRange, Map<String, dynamic>> _mockData = {
-    TimeRange.day: {
-      'steps': 8542,
-      'calories': 320,
-      'distance': 6.2,
-      'activeTime': 75,
-      'postures': [
-        {'time': '06:00-08:30', 'type': '静坐', 'duration': '2.5h', 'color': Colors.blue},
-        {'time': '08:30-09:15', 'type': '走路', 'duration': '45min', 'color': Colors.green},
-        {'time': '09:15-12:00', 'type': '静坐', 'duration': '2.75h', 'color': Colors.blue},
-        {'time': '12:00-13:00', 'type': '站立', 'duration': '1h', 'color': Colors.yellow},
-        {'time': '13:00-13:30', 'type': '走路', 'duration': '30min', 'color': Colors.green},
-        {'time': '13:30-17:00', 'type': '静坐', 'duration': '3.5h', 'color': Colors.blue},
-        {'time': '17:00-18:00', 'type': '跑步', 'duration': '1h', 'color': Colors.red},
-        {'time': '18:00-20:00', 'type': '站立', 'duration': '2h', 'color': Colors.yellow},
-        {'time': '20:00-22:00', 'type': '静坐', 'duration': '2h', 'color': Colors.blue},
-      ],
-      'postureAngles': [
-        {'time': '09:00-09:30', 'angle': '15°', 'status': '正常', 'color': Colors.green},
-        {'time': '09:30-10:00', 'angle': '25°', 'status': '轻度异常', 'color': Colors.yellow},
-        {'time': '10:00-10:30', 'angle': '18°', 'status': '正常', 'color': Colors.green},
-        {'time': '10:30-11:00', 'angle': '32°', 'status': '严重异常', 'color': Colors.red},
-        {'time': '11:00-11:30', 'angle': '20°', 'status': '正常', 'color': Colors.green},
-        {'time': '14:00-14:30', 'angle': '28°', 'status': '轻度异常', 'color': Colors.yellow},
-        {'time': '14:30-15:00', 'angle': '16°', 'status': '正常', 'color': Colors.green},
-        {'time': '15:00-15:30', 'angle': '35°', 'status': '严重异常', 'color': Colors.red},
-        {'time': '15:30-16:00', 'angle': '19°', 'status': '正常', 'color': Colors.green},
-      ],
-      'dataPoints': [
-        {'time': '06:00', 'value': 200},
-        {'time': '08:00', 'value': 1200},
-        {'time': '10:00', 'value': 800},
-        {'time': '12:00', 'value': 1500},
-        {'time': '14:00', 'value': 900},
-        {'time': '16:00', 'value': 1300},
-        {'time': '18:00', 'value': 1600},
-        {'time': '20:00', 'value': 1042},
-      ],
-    },
-    TimeRange.week: {
-      'steps': 52340,
-      'calories': 2100,
-      'distance': 38.5,
-      'activeTime': 480,
-      'postures': [
-        {'day': '周一', 'sitting': '6.5h', 'standing': '3h', 'walking': '1.5h', 'running': '1h'},
-        {'day': '周二', 'sitting': '7h', 'standing': '2.5h', 'walking': '1.5h', 'running': '0.5h'},
-        {'day': '周三', 'sitting': '6h', 'standing': '3h', 'walking': '2h', 'running': '1h'},
-        {'day': '周四', 'sitting': '7.5h', 'standing': '2h', 'walking': '1.5h', 'running': '0h'},
-        {'day': '周五', 'sitting': '6.5h', 'standing': '2.5h', 'walking': '2h', 'running': '1h'},
-        {'day': '周六', 'sitting': '4h', 'standing': '3h', 'walking': '3h', 'running': '2h'},
-        {'day': '周日', 'sitting': '5h', 'standing': '4h', 'walking': '2h', 'running': '1h'},
-      ],
-      'postureAngles': [
-        {'day': '周一', 'normal': '4h', 'mild': '2h', 'severe': '1h'},
-        {'day': '周二', 'normal': '5h', 'mild': '1.5h', 'severe': '0.5h'},
-        {'day': '周三', 'normal': '4.5h', 'mild': '2h', 'severe': '1h'},
-        {'day': '周四', 'normal': '5h', 'mild': '2h', 'severe': '0.5h'},
-        {'day': '周五', 'normal': '4h', 'mild': '2h', 'severe': '1.5h'},
-        {'day': '周六', 'normal': '6h', 'mild': '1h', 'severe': '0h'},
-        {'day': '周日', 'normal': '7h', 'mild': '1h', 'severe': '0h'},
-      ],
-      'dataPoints': [
-        {'day': '周一', 'value': 7800},
-        {'day': '周二', 'value': 8200},
-        {'day': '周三', 'value': 6500},
-        {'day': '周四', 'value': 9100},
-        {'day': '周五', 'value': 8500},
-        {'day': '周六', 'value': 5800},
-        {'day': '周日', 'value': 6440},
-      ],
-    },
-    TimeRange.month: {
-      'steps': 210560,
-      'calories': 8400,
-      'distance': 154.2,
-      'activeTime': 1920,
-      'postures': [
-        {'week': '第1周', 'sitting': '42h', 'standing': '18h', 'walking': '10h', 'running': '5h'},
-        {'week': '第2周', 'sitting': '40h', 'standing': '20h', 'walking': '12h', 'running': '6h'},
-        {'week': '第3周', 'sitting': '38h', 'standing': '22h', 'walking': '14h', 'running': '4h'},
-        {'week': '第4周', 'sitting': '45h', 'standing': '16h', 'walking': '10h', 'running': '3h'},
-      ],
-      'postureAngles': [
-        {'week': '第1周', 'normal': '25h', 'mild': '10h', 'severe': '5h'},
-        {'week': '第2周', 'normal': '28h', 'mild': '8h', 'severe': '4h'},
-        {'week': '第3周', 'normal': '22h', 'mild': '12h', 'severe': '6h'},
-        {'week': '第4周', 'normal': '30h', 'mild': '6h', 'severe': '4h'},
-      ],
-      'dataPoints': [
-        {'week': '第1周', 'value': 62000},
-        {'week': '第2周', 'value': 58000},
-        {'week': '第3周', 'value': 48560},
-        {'week': '第4周', 'value': 42000},
-      ],
-    },
-  };
+  @override
+  void initState() {
+    super.initState();
+    _fetchBodyMovementData();
+  }
+
+  Future<void> _fetchBodyMovementData() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      String timeRangeStr = _selectedRange.toString().split('.').last;
+      final response = await http.post(
+        Uri.parse(ApiConfig.bodyMovementUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'user_id': 1, 'time_range': timeRangeStr}),
+      );
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _bodyMovementData = jsonDecode(response.body);
+        });
+      } else {
+        setState(() {
+          _error = '服务器错误: ${response.statusCode}';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error = '网络错误: $e';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -136,130 +84,182 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: [
                       _buildTimeRangeButton('日', TimeRange.day),
-                      const SizedBox(width: 12),
+                      SizedBox(width: 12),
                       _buildTimeRangeButton('周', TimeRange.week),
-                      const SizedBox(width: 12),
+                      SizedBox(width: 12),
                       _buildTimeRangeButton('月', TimeRange.month),
                     ],
                   ),
                 ),
 
-                // 统计卡片
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _buildStatCard('步数', '${_mockData[_selectedRange]!['steps']}', Icons.directions_walk, Colors.blue),
-                      _buildStatCard('卡路里', '${_mockData[_selectedRange]!['calories']}', Icons.local_fire_department, Colors.orange),
-                      _buildStatCard('距离', '${_mockData[_selectedRange]!['distance']}km', Icons.map, Colors.green),
-                      _buildStatCard('活动时间', '${_mockData[_selectedRange]!['activeTime']}min', Icons.access_time, Colors.purple),
-                    ],
+                if (_isLoading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    child: Center(child: CircularProgressIndicator()),
                   ),
-                ),
 
-                // 姿态数据
-                Container(
-                  margin: const EdgeInsets.symmetric(vertical: 8),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.1),
-                        spreadRadius: 1,
-                        blurRadius: 3,
-                        offset: const Offset(0, 1),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    child: Center(
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(color: Colors.red, fontSize: 16),
                       ),
-                    ],
+                    ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+
+                if (!_isLoading && _error == null && _bodyMovementData != null)
+                  Column(
                     children: [
-                      Text(
-                        _selectedRange == TimeRange.day ? '今日姿态分布' : 
-                        _selectedRange == TimeRange.week ? '本周姿态分布' : '本月姿态分布',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      // 统计卡片
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _buildStatCard('步数', '${_bodyMovementData!['steps']}', Icons.directions_walk, Colors.blue),
+                            _buildStatCard('卡路里', '${_bodyMovementData!['calories']}', Icons.local_fire_department, Colors.orange),
+                            _buildStatCard('距离', '${_bodyMovementData!['distance']}km', Icons.map, Colors.green),
+                            _buildStatCard('活动时间', '${_bodyMovementData!['active_time']}min', Icons.access_time, Colors.purple),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        height: 200, // Set fixed height for the posture distribution
-                        child: SingleChildScrollView(
-                          child: _buildPostureData(),
+
+                      // 姿态数据
+                      Container(
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.withOpacity(0.1),
+                              spreadRadius: 1,
+                              blurRadius: 3,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _selectedRange == TimeRange.day ? '今日姿态分布' : 
+                              _selectedRange == TimeRange.week ? '本周姿态分布' : '本月姿态分布',
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                            SizedBox(height: 16),
+                            SizedBox(
+                              height: 200, // Set fixed height for the posture distribution
+                              child: SingleChildScrollView(
+                                child: _buildPostureDataWithApi(),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // 姿态占比
+                      Container(
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.withOpacity(0.1),
+                              spreadRadius: 1,
+                              blurRadius: 3,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _selectedRange == TimeRange.day ? '今日姿态占比' : 
+                              _selectedRange == TimeRange.week ? '本周姿态占比' : '本月姿态占比',
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                            SizedBox(height: 16),
+                            _buildPostureDistributionChartWithApi(),
+                          ],
+                        ),
+                      ),
+
+                      // 活动图表
+                      Container(
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.withOpacity(0.1),
+                              spreadRadius: 1,
+                              blurRadius: 3,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _selectedRange == TimeRange.day ? '今日活动趋势' : 
+                              _selectedRange == TimeRange.week ? '本周活动趋势' : '本月活动趋势',
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                            SizedBox(height: 20),
+                            SizedBox(
+                              height: 200,
+                              child: _buildActivityChartWithApi(),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // 姿态角度监测
+                      Container(
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.withOpacity(0.1),
+                              spreadRadius: 1,
+                              blurRadius: 3,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _selectedRange == TimeRange.day ? '今日前俯角监测' : 
+                              _selectedRange == TimeRange.week ? '本周前俯角监测' : '本月前俯角监测',
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                            SizedBox(height: 16),
+                            SizedBox(
+                              height: 200, // Set fixed height for the posture angle monitoring
+                              child: SingleChildScrollView(
+                                child: _buildPostureAngleDataWithApi(),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                ),
-
-                // 活动图表
-                Container(
-                  margin: const EdgeInsets.symmetric(vertical: 8),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.1),
-                        spreadRadius: 1,
-                        blurRadius: 3,
-                        offset: const Offset(0, 1),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _selectedRange == TimeRange.day ? '今日活动趋势' : 
-                        _selectedRange == TimeRange.week ? '本周活动趋势' : '本月活动趋势',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        height: 200,
-                        child: _buildActivityChart(),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // 姿态角度监测
-                Container(
-                  margin: const EdgeInsets.symmetric(vertical: 8),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.1),
-                        spreadRadius: 1,
-                        blurRadius: 3,
-                        offset: const Offset(0, 1),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _selectedRange == TimeRange.day ? '今日前俯角监测' : 
-                        _selectedRange == TimeRange.week ? '本周前俯角监测' : '本月前俯角监测',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        height: 200, // Set fixed height for the posture angle monitoring
-                        child: SingleChildScrollView(
-                          child: _buildPostureAngleData(),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
 
                 // 报告生成按钮
                 Container(
@@ -284,7 +284,7 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
                         '生成报告',
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
@@ -332,7 +332,7 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                      SizedBox(height: 8),
                       const Text(
                         '点击按钮生成相应报告，报告将通过智能体服务发送给您',
                         style: TextStyle(fontSize: 12, color: Color(0xFF757575)),
@@ -358,6 +358,7 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
         setState(() {
           _selectedRange = range;
         });
+        _fetchBodyMovementData();
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -401,9 +402,9 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Icon(icon, size: 24, color: color),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             Text(title, style: const TextStyle(fontSize: 12, color: Color(0xFF757575))),
-            const SizedBox(height: 4),
+            SizedBox(height: 4),
             Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ],
         ),
@@ -411,8 +412,16 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
     );
   }
 
-  Widget _buildPostureData() {
-    List<dynamic> postures = _mockData[_selectedRange]!['postures'];
+  Widget _buildPostureDataWithApi() {
+    if (_bodyMovementData == null || _bodyMovementData!['postures'] == null) {
+      return const Center(child: Text('暂无姿态数据'));
+    }
+    
+    List<dynamic> postures = _bodyMovementData!['postures'];
+    
+    if (postures.isEmpty) {
+      return const Center(child: Text('暂无姿态数据'));
+    }
     
     if (_selectedRange == TimeRange.day) {
       // 日视图：时间轴形式
@@ -422,15 +431,16 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
             margin: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
               children: [
-                SizedBox(
+                Container(
                   width: 100,
-                  child: Text(posture['time'], style: const TextStyle(fontSize: 12)),
+                  padding: const EdgeInsets.only(left: 0),
+                  child: Text(posture['time'] ?? '', style: const TextStyle(fontSize: 12)),
                 ),
                 Expanded(
                   child: Container(
                     height: 40,
                     decoration: BoxDecoration(
-                      color: posture['color'],
+                      color: Color(int.parse((posture['color'] ?? '#4A90E2').replaceAll('#', '0xFF'))),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -438,11 +448,11 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
                       children: [
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Text(posture['type'], style: const TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.bold)),
+                          child: Text(posture['type'] ?? '', style: const TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.bold)),
                         ),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Text(posture['duration'], style: const TextStyle(fontSize: 12, color: Colors.white)),
+                          child: Text(posture['duration'] ?? '', style: const TextStyle(fontSize: 12, color: Colors.white)),
                         ),
                       ],
                     ),
@@ -460,18 +470,20 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
         child: DataTable(
           columns: const [
             DataColumn(label: Text('时间')),
-            DataColumn(label: Text('静坐')),
-            DataColumn(label: Text('站立')),
-            DataColumn(label: Text('走路')),
-            DataColumn(label: Text('跑步')),
+            DataColumn(label: Text('静坐(h)')),
+            DataColumn(label: Text('站立(h)')),
+            DataColumn(label: Text('走路(h)')),
+            DataColumn(label: Text('跑步(h)')),
+            DataColumn(label: Text('躺卧(h)')),
           ],
           rows: postures.map((posture) {
             return DataRow(cells: [
-              DataCell(Text(_selectedRange == TimeRange.week ? posture['day'] : posture['week'])),
-              DataCell(Text(posture['sitting'])),
-              DataCell(Text(posture['standing'])),
-              DataCell(Text(posture['walking'])),
-              DataCell(Text(posture['running'])),
+              DataCell(Text(_selectedRange == TimeRange.week ? (posture['date'] ?? '') : (posture['week'] ?? ''))),
+              DataCell(Text(posture['sitting'] ?? '0')),
+              DataCell(Text(posture['standing'] ?? '0')),
+              DataCell(Text(posture['walking'] ?? '0')),
+              DataCell(Text(posture['running'] ?? '0')),
+              DataCell(Text(posture['lying'] ?? '0')),
             ]);
           }).toList(),
         ),
@@ -479,23 +491,32 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
     }
   }
 
-  Widget _buildActivityChart() {
-    List<dynamic> dataPoints = _mockData[_selectedRange]!['dataPoints'];
+  Widget _buildActivityChartWithApi() {
+    if (_bodyMovementData == null || _bodyMovementData!['activity_trend'] == null) {
+      return const Center(child: Text('暂无活动趋势数据'));
+    }
     
-    // 找出最大值
-    double maxValue = 0;
-    for (var point in dataPoints) {
-      if (point['value'] > maxValue) {
-        maxValue = point['value'].toDouble();
+    List<dynamic> activityTrend = _bodyMovementData!['activity_trend'];
+    
+    if (activityTrend.isEmpty) {
+      return const Center(child: Text('暂无活动趋势数据'));
+    }
+    
+    // 找出最大步数用于计算高度
+    int maxSteps = 0;
+    for (var item in activityTrend) {
+      int steps = item['steps'] ?? 0;
+      if (steps > maxSteps) {
+        maxSteps = steps;
       }
     }
     
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: dataPoints.asMap().entries.map((entry) {
-        int index = entry.key;
-        var point = entry.value;
-        double height = (point['value'] / maxValue) * 150;
+      children: activityTrend.map((item) {
+        int steps = item['steps'] ?? 0;
+        // 根据步数计算高度，最大高度150，最小高度5
+        double height = maxSteps > 0 ? (steps / maxSteps) * 145 + 5 : 5;
         
         return Column(
           mainAxisAlignment: MainAxisAlignment.end,
@@ -511,10 +532,9 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
                 ),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             Text(
-              _selectedRange == TimeRange.day ? point['time'] : 
-              _selectedRange == TimeRange.week ? point['day'] : point['week'],
+              item['label'] ?? '',
               style: const TextStyle(fontSize: 10, color: Color(0xFF757575)),
             ),
           ],
@@ -523,8 +543,16 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
     );
   }
 
-  Widget _buildPostureAngleData() {
-    List<dynamic> postureAngles = _mockData[_selectedRange]!['postureAngles'];
+  Widget _buildPostureAngleDataWithApi() {
+    if (_bodyMovementData == null || _bodyMovementData!['posture_angles'] == null) {
+      return const Center(child: Text('暂无姿态角度数据'));
+    }
+    
+    List<dynamic> postureAngles = _bodyMovementData!['posture_angles'];
+    
+    if (postureAngles.isEmpty) {
+      return const Center(child: Text('暂无姿态角度数据'));
+    }
     
     if (_selectedRange == TimeRange.day) {
       // 日视图：时间轴形式
@@ -534,15 +562,16 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
             margin: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
               children: [
-                SizedBox(
+                Container(
                   width: 100,
-                  child: Text(angle['time'], style: const TextStyle(fontSize: 12)),
+                  padding: const EdgeInsets.only(left: 0),
+                  child: Text(angle['time'] ?? '', style: const TextStyle(fontSize: 12)),
                 ),
                 Expanded(
                   child: Container(
                     height: 40,
                     decoration: BoxDecoration(
-                      color: angle['color'],
+                      color: Color(int.parse((angle['color'] ?? '#4A90E2').replaceAll('#', '0xFF'))),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -550,11 +579,11 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
                       children: [
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Text(angle['status'], style: const TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.bold)),
+                          child: Text(angle['status'] ?? '', style: const TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.bold)),
                         ),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Text(angle['angle'], style: const TextStyle(fontSize: 12, color: Colors.white)),
+                          child: Text(angle['angle'] ?? '', style: const TextStyle(fontSize: 12, color: Colors.white)),
                         ),
                       ],
                     ),
@@ -572,16 +601,16 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
         child: DataTable(
           columns: const [
             DataColumn(label: Text('时间')),
-            DataColumn(label: Text('正常')),
-            DataColumn(label: Text('轻度异常')),
-            DataColumn(label: Text('严重异常')),
+            DataColumn(label: Text('正常(h)')),
+            DataColumn(label: Text('轻微异常(h)')),
+            DataColumn(label: Text('严重异常(h)')),
           ],
           rows: postureAngles.map((angle) {
             return DataRow(cells: [
-              DataCell(Text(_selectedRange == TimeRange.week ? angle['day'] : angle['week'])),
-              DataCell(Text(angle['normal'])),
-              DataCell(Text(angle['mild'])),
-              DataCell(Text(angle['severe'])),
+              DataCell(Text(_selectedRange == TimeRange.week ? (angle['date'] ?? '') : (angle['week'] ?? ''))),
+              DataCell(Text(angle['normal'] ?? '0')),
+              DataCell(Text(angle['mild'] ?? '0')),
+              DataCell(Text(angle['severe'] ?? '0')),
             ]);
           }).toList(),
         ),
@@ -595,5 +624,121 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
     if (widget.onGenerateReport != null) {
       widget.onGenerateReport!(reportType);
     }
+  }
+
+  Widget _buildPostureDistributionChartWithApi() {
+    if (_bodyMovementData == null || _bodyMovementData!['posture_distribution'] == null) {
+      return const Center(child: Text('暂无姿态分布数据'));
+    }
+    
+    List<dynamic> distribution = _bodyMovementData!['posture_distribution'];
+    
+    if (distribution.isEmpty) {
+      return const Center(child: Text('暂无姿态分布数据'));
+    }
+    
+    return Container(
+      height: 200,
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              width: 150,
+              height: 150,
+              child: CustomPaint(
+                painter: PieChartPainter(distribution),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: distribution.map((item) {
+                return Container(
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: Color(int.parse((item['color'] ?? '#4A90E2').replaceAll('#', '0xFF'))),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                      Text(item['name'] ?? '', style: const TextStyle(fontSize: 14)),
+                      SizedBox(width: 8),
+                      Text('${item['value'] ?? 0}%', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                      SizedBox(width: 8),
+                      Text(item['hours'] ?? '0h', style: const TextStyle(fontSize: 12, color: Color(0xFF757575))),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+}
+
+class PieChartPainter extends CustomPainter {
+  final List<dynamic> data;
+  
+  PieChartPainter(this.data);
+  
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (data == null || data.isEmpty) {
+      return;
+    }
+    
+    double centerX = size.width / 2;
+    double centerY = size.height / 2;
+    double radius = min(centerX, centerY) - 20;
+    
+    double total = 0;
+    for (var item in data) {
+      if (item != null && item['value'] != null) {
+        total += item['value'];
+      }
+    }
+    
+    if (total == 0) {
+      return;
+    }
+    
+    double currentAngle = -pi / 2; // 从顶部开始
+    
+    for (var item in data) {
+      if (item != null && item['value'] != null && item['color'] != null) {
+        double angle = (item['value'] / total) * 2 * pi;
+        
+        Paint paint = Paint()..color = Color(int.parse((item['color'] ?? '#4A90E2').replaceAll('#', '0xFF')));
+        
+        canvas.drawArc(
+          Rect.fromCircle(center: Offset(centerX, centerY), radius: radius),
+          currentAngle,
+          angle,
+          true,
+          paint,
+        );
+        
+        currentAngle += angle;
+      }
+    }
+    
+    // 绘制中心圆
+    Paint centerPaint = Paint()..color = Colors.white;
+    canvas.drawCircle(Offset(centerX, centerY), radius * 0.6, centerPaint);
+  }
+  
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) {
+    return false;
   }
 }

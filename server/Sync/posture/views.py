@@ -180,6 +180,395 @@ def process_posture_data(request):
     else:
         return JsonResponse({'error': 'Method not allowed'}, status=405)
 
+@csrf_exempt
+def get_body_movement_data(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            user_id = data.get('user_id')
+            time_range = data.get('time_range', 'day')  # day, week, month
+            
+            if not user_id:
+                return JsonResponse({'error': 'Missing user_id'}, status=400)
+            
+            # 获取用户信息
+            try:
+                user = User.objects.get(id=user_id)
+            except User.DoesNotExist:
+                return JsonResponse({'error': 'User not found'}, status=404)
+            
+            # 计算时间范围
+            now = timezone.now()
+            if time_range == 'day':
+                # 日视图：今天
+                start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                end_time = None
+            elif time_range == 'week':
+                # 周视图：过去7天（不包括今天）
+                end_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                start_time = end_time - timezone.timedelta(days=7)
+            elif time_range == 'month':
+                # 月视图：过去30天（不包括今天）
+                end_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                start_time = end_time - timezone.timedelta(days=30)
+            else:
+                end_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                start_time = end_time - timezone.timedelta(days=7)
+            
+            # 查询时间范围内的记录
+            if end_time:
+                records = PostureRecord.objects.filter(
+                    user=user,
+                    start_time__gte=start_time,
+                    start_time__lt=end_time
+                ).order_by('start_time')
+            else:
+                records = PostureRecord.objects.filter(
+                    user=user,
+                    start_time__gte=start_time
+                ).order_by('start_time')
+            
+            # 初始化统计数据
+            steps = 0
+            calories = 0
+            distance = 0.0
+            active_time = 0
+            
+            # 姿态持续时间统计
+            posture_durations = {
+                State.LIE.value: 0,    # 躺卧
+                State.STAND.value: 0,  # 站立
+                State.SIT.value: 0,     # 静坐
+                State.WALK.value: 0,    # 走路
+                State.RUN.value: 0      # 跑步
+            }
+            
+            # 处理每条记录
+            for record in records:
+                duration = record.duration if record.duration else 0
+                
+                # 累加各姿态的持续时间
+                posture_durations[record.state] += duration
+                
+                # 计算步数、卡路里和距离
+                if record.state == State.WALK.value:
+                    # 步行：100步/分钟
+                    walk_steps = int((duration / 60) * 100)
+                    steps += walk_steps
+                    calories += int(walk_steps * 0.04)
+                    distance += (walk_steps * 0.7) / 1000
+                elif record.state == State.RUN.value:
+                    # 跑步：160步/分钟
+                    run_steps = int((duration / 60) * 160)
+                    steps += run_steps
+                    calories += int(run_steps * 0.06)
+                    distance += (run_steps * 0.9) / 1000
+                
+                # 计算活动时间
+                if record.state in [State.STAND.value, State.WALK.value, State.RUN.value]:
+                    active_time += int(duration / 60)
+            
+            # 生成姿态分布数据
+            postures = []
+            posture_angles = []
+            
+            if time_range == 'day':
+                # 日视图：按时间顺序的姿态记录
+                for record in records:
+                    start_str = record.start_time.strftime('%H:%M')
+                    end_str = record.end_time.strftime('%H:%M') if record.end_time else '现在'
+                    
+                    # 姿态类型和颜色
+                    posture_map = {
+                        State.LIE.value: ('躺卧', '#9E9E9E'),
+                        State.STAND.value: ('站立', '#FFC107'),
+                        State.SIT.value: ('静坐', '#2196F3'),
+                        State.WALK.value: ('走路', '#4CAF50'),
+                        State.RUN.value: ('跑步', '#F44336')
+                    }
+                    
+                    posture_type, color = posture_map.get(record.state, ('未知', '#999999'))
+                    duration_min = int(record.duration / 60) if record.duration else 0
+                    
+                    postures.append({
+                        'time': f'{start_str}-{end_str}',
+                        'type': posture_type,
+                        'duration': f'{duration_min}min',
+                        'color': color
+                    })
+                    
+                    # 姿态角度
+                    if record.duration and record.duration > 0:
+                        posture_angles.append({
+                            'time': start_str,
+                            'angle': f'{record.trunk_stable_angle:.1f}°',
+                            'status': '正常' if record.posture_risk_level == PostureRiskLevel.NORMAL.value else '异常',
+                            'color': '#4CAF50' if record.posture_risk_level == PostureRiskLevel.NORMAL.value else '#FFC107'
+                        })
+            else:
+                # 周/月视图：按天或按周统计的姿态数据
+                if time_range == 'week':
+                    # 周视图：按天统计（7天）
+                    daily_posture_stats = {}
+                    daily_angle_stats = {}
+                    
+                    for record in records:
+                        date_str = record.start_time.strftime('%m-%d')
+                        
+                        if date_str not in daily_posture_stats:
+                            daily_posture_stats[date_str] = {
+                                'date': date_str,
+                                'sitting': 0,
+                                'standing': 0,
+                                'walking': 0,
+                                'running': 0,
+                                'lying': 0
+                            }
+                        
+                        if date_str not in daily_angle_stats:
+                            daily_angle_stats[date_str] = {
+                                'date': date_str,
+                                'normal_angle': 0,
+                                'mild_angle': 0,
+                                'severe_angle': 0
+                            }
+                        
+                        # 统计姿态持续时间（转换为小时）
+                        duration = record.duration if record.duration else 0
+                        duration_hours = duration / 3600
+                        
+                        if record.state == State.SIT.value:
+                            daily_posture_stats[date_str]['sitting'] += duration_hours
+                        elif record.state == State.STAND.value:
+                            daily_posture_stats[date_str]['standing'] += duration_hours
+                        elif record.state == State.WALK.value:
+                            daily_posture_stats[date_str]['walking'] += duration_hours
+                        elif record.state == State.RUN.value:
+                            daily_posture_stats[date_str]['running'] += duration_hours
+                        elif record.state == State.LIE.value:
+                            daily_posture_stats[date_str]['lying'] += duration_hours
+                        
+                        # 统计角度异常时间（转换为小时）
+                        if record.posture_risk_level == PostureRiskLevel.NORMAL.value:
+                            daily_angle_stats[date_str]['normal_angle'] += duration_hours
+                        elif record.posture_risk_level == PostureRiskLevel.MILD_RISK.value:
+                            daily_angle_stats[date_str]['mild_angle'] += duration_hours
+                        elif record.posture_risk_level == PostureRiskLevel.SEVERE_RISK.value:
+                            daily_angle_stats[date_str]['severe_angle'] += duration_hours
+                    
+                    # 生成姿态分布数据（按天显示，表格格式）
+                    for date_str in sorted(daily_posture_stats.keys()):
+                        stats = daily_posture_stats[date_str]
+                        postures.append({
+                            'date': date_str,
+                            'sitting': f'{stats["sitting"]:.1f}',
+                            'standing': f'{stats["standing"]:.1f}',
+                            'walking': f'{stats["walking"]:.1f}',
+                            'running': f'{stats["running"]:.1f}',
+                            'lying': f'{stats["lying"]:.1f}'
+                        })
+                    
+                    # 生成姿态角度数据（按天显示，表格格式）
+                    for date_str in sorted(daily_angle_stats.keys()):
+                        stats = daily_angle_stats[date_str]
+                        posture_angles.append({
+                            'date': date_str,
+                            'normal': f'{stats["normal_angle"]:.1f}',
+                            'mild': f'{stats["mild_angle"]:.1f}',
+                            'severe': f'{stats["severe_angle"]:.1f}'
+                        })
+                else:
+                    # 月视图：按周统计（4周）
+                    weekly_posture_stats = {}
+                    weekly_angle_stats = {}
+                    
+                    for record in records:
+                        # 计算是第几周（最多4周）
+                        days_since_start = (now.date() - record.start_time.date()).days
+                        week_num = min(days_since_start // 7, 3)  # 限制为0-3，即第1-4周
+                        week_label = f'第{week_num + 1}周'
+                        
+                        if week_label not in weekly_posture_stats:
+                            weekly_posture_stats[week_label] = {
+                                'week': week_label,
+                                'sitting': 0,
+                                'standing': 0,
+                                'walking': 0,
+                                'running': 0,
+                                'lying': 0
+                            }
+                        
+                        if week_label not in weekly_angle_stats:
+                            weekly_angle_stats[week_label] = {
+                                'week': week_label,
+                                'normal_angle': 0,
+                                'mild_angle': 0,
+                                'severe_angle': 0
+                            }
+                        
+                        # 统计姿态持续时间（转换为小时）
+                        duration = record.duration if record.duration else 0
+                        duration_hours = duration / 3600
+                        
+                        if record.state == State.SIT.value:
+                            weekly_posture_stats[week_label]['sitting'] += duration_hours
+                        elif record.state == State.STAND.value:
+                            weekly_posture_stats[week_label]['standing'] += duration_hours
+                        elif record.state == State.WALK.value:
+                            weekly_posture_stats[week_label]['walking'] += duration_hours
+                        elif record.state == State.RUN.value:
+                            weekly_posture_stats[week_label]['running'] += duration_hours
+                        elif record.state == State.LIE.value:
+                            weekly_posture_stats[week_label]['lying'] += duration_hours
+                        
+                        # 统计角度异常时间（转换为小时）
+                        if record.posture_risk_level == PostureRiskLevel.NORMAL.value:
+                            weekly_angle_stats[week_label]['normal_angle'] += duration_hours
+                        elif record.posture_risk_level == PostureRiskLevel.MILD_RISK.value:
+                            weekly_angle_stats[week_label]['mild_angle'] += duration_hours
+                        elif record.posture_risk_level == PostureRiskLevel.SEVERE_RISK.value:
+                            weekly_angle_stats[week_label]['severe_angle'] += duration_hours
+                    
+                    # 生成姿态分布数据（按周显示，表格格式）
+                    for week_label in sorted(weekly_posture_stats.keys()):
+                        stats = weekly_posture_stats[week_label]
+                        postures.append({
+                            'week': week_label,
+                            'sitting': f'{stats["sitting"]:.1f}',
+                            'standing': f'{stats["standing"]:.1f}',
+                            'walking': f'{stats["walking"]:.1f}',
+                            'running': f'{stats["running"]:.1f}',
+                            'lying': f'{stats["lying"]:.1f}'
+                        })
+                    
+                    # 生成姿态角度数据（按周显示，表格格式）
+                    for week_label in sorted(weekly_angle_stats.keys()):
+                        stats = weekly_angle_stats[week_label]
+                        posture_angles.append({
+                            'week': week_label,
+                            'normal': f'{stats["normal_angle"]:.1f}',
+                            'mild': f'{stats["mild_angle"]:.1f}',
+                            'severe': f'{stats["severe_angle"]:.1f}'
+                        })
+            
+            # 生成活动趋势数据
+            activity_trend = []
+            
+            if time_range == 'day':
+                # 日视图：每3小时统计一次步数
+                for i in range(8):
+                    hour_start = i * 3
+                    hour_end = (i + 1) * 3
+                    
+                    period_steps = 0
+                    for record in records:
+                        record_hour = record.start_time.hour
+                        if hour_start <= record_hour < hour_end:
+                            duration = record.duration if record.duration else 0
+                            if record.state == State.WALK.value:
+                                period_steps += int((duration / 60) * 100)
+                            elif record.state == State.RUN.value:
+                                period_steps += int((duration / 60) * 160)
+                    
+                    activity_trend.append({
+                        'label': f'{hour_start:02d}:00',
+                        'steps': period_steps
+                    })
+            elif time_range == 'week':
+                # 周视图：每天统计一次步数（固定7天）
+                daily_steps = {}
+                for record in records:
+                    date_str = record.start_time.strftime('%m/%d')
+                    if date_str not in daily_steps:
+                        daily_steps[date_str] = 0
+                    
+                    duration = record.duration if record.duration else 0
+                    if record.state == State.WALK.value:
+                        daily_steps[date_str] += int((duration / 60) * 100)
+                    elif record.state == State.RUN.value:
+                        daily_steps[date_str] += int((duration / 60) * 160)
+                
+                # 生成过去7天的日期（不包括今天）
+                for i in range(7, 0, -1):
+                    date = now.date() - timezone.timedelta(days=i)
+                    date_str = date.strftime('%m/%d')
+                    activity_trend.append({
+                        'label': date_str,
+                        'steps': daily_steps.get(date_str, 0)
+                    })
+            else:
+                # 月视图：每周统计一次步数（固定4周）
+                weekly_steps = {}
+                for record in records:
+                    days_since_start = (now.date() - record.start_time.date()).days
+                    week_num = min(days_since_start // 7, 3)
+                    week_label = f'第{week_num + 1}周'
+                    
+                    if week_label not in weekly_steps:
+                        weekly_steps[week_label] = 0
+                    
+                    duration = record.duration if record.duration else 0
+                    if record.state == State.WALK.value:
+                        weekly_steps[week_label] += int((duration / 60) * 100)
+                    elif record.state == State.RUN.value:
+                        weekly_steps[week_label] += int((duration / 60) * 160)
+                
+                # 生成4周的数据
+                for i in range(4):
+                    week_label = f'第{i + 1}周'
+                    activity_trend.append({
+                        'label': week_label,
+                        'steps': weekly_steps.get(week_label, 0)
+                    })
+            
+            # 生成姿态占比数据
+            total_duration = sum(posture_durations.values())
+            posture_distribution = []
+            posture_info = [
+                (State.LIE.value, '躺卧', '#9E9E9E'),
+                (State.STAND.value, '站立', '#FFC107'),
+                (State.SIT.value, '静坐', '#2196F3'),
+                (State.WALK.value, '走路', '#4CAF50'),
+                (State.RUN.value, '跑步', '#F44336')
+            ]
+            
+            for state, name, color in posture_info:
+                if total_duration > 0:
+                    percentage = (posture_durations[state] / total_duration) * 100
+                else:
+                    percentage = 0
+                
+                hours = posture_durations[state] / 3600
+                
+                posture_distribution.append({
+                    'name': name,
+                    'value': int(percentage),
+                    'color': color,
+                    'hours': f'{hours:.1f}h'
+                })
+            
+            # 构建响应数据
+            result = {
+                'steps': steps,
+                'calories': calories,
+                'distance': round(distance, 1),
+                'active_time': active_time,
+                'postures': postures,
+                'posture_angles': posture_angles,
+                'posture_distribution': posture_distribution,
+                'activity_trend': activity_trend,
+                'time_range': time_range
+            }
+            
+            return JsonResponse(result)
+            
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    else:
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
 
 @csrf_exempt
 def start_bluetooth_receiver(request):
