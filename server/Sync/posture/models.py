@@ -54,6 +54,7 @@ class User(models.Model):
 class PostureRecord(models.Model):
     record_id = models.AutoField(primary_key=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
+    # 生成数据后恢复为自动添加时间
     start_time = models.DateTimeField(auto_now_add=True)
     end_time = models.DateTimeField(blank=True, null=True)
     state = models.IntegerField(choices=[(s.value, s.name) for s in State])

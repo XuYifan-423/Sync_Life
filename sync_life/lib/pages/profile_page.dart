@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../config/api_config.dart';
+import '../utils/bluetooth_global_state.dart';
 
 class ProfilePage extends StatefulWidget {
   ProfilePage({super.key});
@@ -14,6 +15,8 @@ class ProfilePage extends StatefulWidget {
 }
 
 class ProfilePageState extends State<ProfilePage> with SingleTickerProviderStateMixin {
+  final BluetoothGlobalState _bluetoothGlobalState = BluetoothGlobalState();
+
   // 用户数据
   String _phone = '';
   String _email = '';
@@ -23,15 +26,12 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
   int _age = 0;
   double _height = 0.0;
   double _weight = 0.0;
-  String _deviceName = '未连接设备';
-  bool _isDeviceConnected = false;
   bool _isLoading = true;
   bool _isDataLoaded = false;
   int? _userId;
   
   // 蓝牙相关状态
   List<ScanResult> _scanResults = [];
-  BluetoothDevice? _connectedDevice;
   bool _isScanning = false;
   
   // 动画控制器
@@ -67,74 +67,32 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
     
     // 应用启动时检查年龄是否需要更新
     _checkAndUpdateAge();
-    // 加载用户信息
-    _loadInitialData();
+    // 加载用户ID
+    _loadUserId();
+    // 直接显示页面，不加载详细信息
+    _animationController.forward();
   }
 
-  // 加载初始数据
-  void _loadInitialData() async {
-    await _refreshUserInfo();
-    await _loadDeviceConnectionStatus();
-  }
-
-  // 加载设备连接状态
-  Future<void> _loadDeviceConnectionStatus() async {
-    try {
-      // 直接检查蓝牙连接状态
-      bool isBluetoothOn = false;
-      try {
-        isBluetoothOn = await FlutterBluePlus.isOn;
-      } catch (e) {
-        print('检查蓝牙状态时出错: $e');
-      }
-      
-      if (isBluetoothOn) {
-        // 获取已连接的设备列表
-        List<BluetoothDevice> connectedDevices = FlutterBluePlus.connectedDevices;
-        if (connectedDevices.isNotEmpty) {
-          // 更新连接状态
-          if (mounted) {
-            setState(() {
-              _isDeviceConnected = true;
-              if (connectedDevices.length == 1) {
-                // 只有一个设备时，显示设备名称
-                _deviceName = connectedDevices.first.name.isEmpty ? '未知设备' : connectedDevices.first.name;
-                _connectedDevice = connectedDevices.first;
-              } else {
-                // 有多个设备时，显示设备数量
-                _deviceName = '已连接 ${connectedDevices.length} 个设备';
-                _connectedDevice = connectedDevices.first;
-              }
-            });
-          }
-          // 保存设备连接状态
-          await _saveDeviceConnectionStatus(true, _deviceName);
-          return;
+  // 加载用户ID
+  Future<void> _loadUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getInt('userId');
+    final userIdentifier = prefs.getString('userIdentifier');
+    final isLoggedInValue = prefs.getBool('isLoggedIn') ?? false;
+    
+    print('isLoggedIn: $isLoggedInValue');
+    print('userIdentifier: $userIdentifier');
+    print('userId: $userId');
+    
+    if (mounted) {
+      setState(() {
+        if (userIdentifier != null) {
+          _phone = userIdentifier;
         }
-      }
-      
-      // 如果没有直接连接的设备，更新状态为未连接并保存
-      if (mounted) {
-        setState(() {
-          _isDeviceConnected = false;
-          _deviceName = '未连接设备';
-        });
-      }
-      // 保存设备连接状态
-      await _saveDeviceConnectionStatus(false, '未连接设备');
-    } catch (error) {
-      print('加载设备连接状态时出错: $error');
-    }
-  }
-
-  // 保存设备连接状态
-  Future<void> _saveDeviceConnectionStatus(bool isConnected, String deviceName) async {
-    try {
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('isDeviceConnected', isConnected);
-      await prefs.setString('deviceName', deviceName);
-    } catch (error) {
-      print('保存设备连接状态时出错: $error');
+        _userId = userId;
+        _isLoading = false;
+        _isDataLoaded = true;
+      });
     }
   }
 
@@ -182,7 +140,7 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
                       child: ListTile(
                         leading: const Icon(Icons.wifi_tethering, color: Color(0xFF4A90E2)),
                         title: const Text('我的设备'),
-                        subtitle: Text('$_deviceName          ${_isDeviceConnected ? '已连接' : '未连接'}'),
+                        subtitle: Text('${_bluetoothGlobalState.deviceName}          ${_bluetoothGlobalState.isBluetoothConnected ? '已连接' : '未连接'}'),
                         trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                         onTap: () {
                           // 设备管理逻辑
@@ -201,7 +159,6 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
                       child: ListTile(
                         leading: const Icon(Icons.phone, color: Color(0xFF4A90E2)),
                         title: const Text('手机号'),
-                        subtitle: Text(_phone.isEmpty ? '暂无手机号，点击添加' : _phone),
                         trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                         onTap: () {
                           // 修改手机号逻辑
@@ -220,7 +177,6 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
                       child: ListTile(
                         leading: const Icon(Icons.email, color: Color(0xFF4A90E2)),
                         title: const Text('邮箱'),
-                        subtitle: Text(_email.isEmpty ? '-' : _email),
                         trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                         onTap: () {
                           // 修改邮箱逻辑
@@ -239,7 +195,6 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
                       child: ListTile(
                         leading: const Icon(Icons.calendar_today, color: Color(0xFF4A90E2)),
                         title: const Text('年龄'),
-                        subtitle: Text('$_age 岁'),
                         trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                         onTap: () {
                           // 修改年龄逻辑
@@ -257,8 +212,7 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
                       ),
                       child: ListTile(
                         leading: const Icon(Icons.trending_up, color: Color(0xFF4A90E2)),
-                        title: const Text('身高'),
-                        subtitle: Text(_height > 0 ? '$_height cm' : '未设置'),
+                        title: const Text('身高（cm）'),
                         trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                         onTap: () {
                           // 修改身高逻辑
@@ -276,8 +230,7 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
                       ),
                       child: ListTile(
                         leading: const Icon(Icons.fitness_center, color: Color(0xFF4A90E2)),
-                        title: const Text('体重'),
-                        subtitle: Text(_weight > 0 ? '$_weight kg' : '未设置'),
+                        title: const Text('体重（kg）'),
                         trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                         onTap: () {
                           // 修改体重逻辑
@@ -296,7 +249,6 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
                       child: ListTile(
                         leading: const Icon(Icons.person_outline, color: Color(0xFF4A90E2)),
                         title: const Text('身份'),
-                        subtitle: Text(_identity.isEmpty ? '默认' : _identity),
                         trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                         onTap: () {
                           // 修改身份逻辑
@@ -315,7 +267,6 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
                       child: ListTile(
                         leading: const Icon(Icons.local_hospital, color: Color(0xFF4A90E2)),
                         title: const Text('疾病史'),
-                        subtitle: Text(_ills.isEmpty ? '无' : _ills),
                         trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                         onTap: () {
                           // 修改疾病史逻辑
@@ -334,7 +285,6 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
                       child: ListTile(
                         leading: const Icon(Icons.lock, color: Color(0xFF4A90E2)),
                         title: const Text('密码'),
-                        subtitle: Text(_password),
                         trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                         onTap: () {
                           // 修改密码逻辑
@@ -505,11 +455,11 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
                     children: [
                       const Icon(Icons.error, color: Colors.red),
                       const SizedBox(width: 8),
-                      Text('当前设备: $_deviceName'),
+                      Text('当前设备: ${_bluetoothGlobalState.deviceName}'),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Text('连接状态: ${_isDeviceConnected ? '已连接' : '未连接'}'),
+                  Text('连接状态: ${_bluetoothGlobalState.isBluetoothConnected ? '已连接' : '未连接'}'),
                   const SizedBox(height: 16),
                   Text('搜素设备时，若一次没打开，请多试几次'),
                 ],
@@ -533,14 +483,7 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
                   }
                 }
                 
-                setState(() {
-                  _isDeviceConnected = false;
-                  _deviceName = '未连接设备';
-                  _connectedDevice = null;
-                });
-                
-                // 保存设备连接状态
-                await _saveDeviceConnectionStatus(false, '未连接设备');
+                _bluetoothGlobalState.disconnect();
                 
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -612,7 +555,7 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
             
             // 遍历扫描结果，分离已连接和未连接的设备
             for (var result in results) {
-              bool isConnected = _connectedDevice != null && _connectedDevice!.id == result.device.id;
+              bool isConnected = _bluetoothGlobalState.connectedDevice != null && _bluetoothGlobalState.connectedDevice!.id == result.device.id;
               if (isConnected) {
                 processedResults.add(result);
               } else {
@@ -621,10 +564,10 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
             }
             
             // 检查已连接的设备是否在扫描结果中，如果不在，手动添加
-            if (_connectedDevice != null) {
+            if (_bluetoothGlobalState.connectedDevice != null) {
               bool isInResults = false;
               for (var result in results) {
-                if (result.device.id == _connectedDevice!.id) {
+                if (result.device.id == _bluetoothGlobalState.connectedDevice!.id) {
                   isInResults = true;
                   break;
                 }
@@ -705,7 +648,7 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
                       print('设备信息: 名称=${result.device.name}, ID=${result.device.id}, 信号强度=${result.rssi}');
                       
                       // 检查设备是否已连接
-                      bool isConnected = _connectedDevice != null && _connectedDevice!.id == result.device.id;
+                      bool isConnected = _bluetoothGlobalState.connectedDevice != null && _bluetoothGlobalState.connectedDevice!.id == result.device.id;
                       
                       return ListTile(
                         title: Text(result.device.name.isEmpty ? '未知设备' : result.device.name),
@@ -796,14 +739,7 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
       if (mounted) {
         Navigator.pop(context);
         
-        setState(() {
-          _connectedDevice = device;
-          _deviceName = device.name.isEmpty ? '未知设备' : device.name;
-          _isDeviceConnected = true;
-        });
-        
-        // 保存设备连接状态
-        await _saveDeviceConnectionStatus(true, _deviceName);
+        _bluetoothGlobalState.setBluetoothConnected(true, device, device.name.isEmpty ? '未知设备' : device.name);
         
         // 显示连接成功提示
         ScaffoldMessenger.of(context).showSnackBar(
@@ -941,7 +877,7 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
       // 模拟蓝牙设备发送的姿态数据
       final bluetoothData = {
         'user_id': userId,
-        'device_id': _deviceName,
+        'device_id': _bluetoothGlobalState.deviceName,
         'timestamp': DateTime.now().toIso8601String(),
         'posture_data': {
           'quaternion': {'x': 0.0, 'y': 0.0, 'z': 0.0, 'w': 1.0},
@@ -969,7 +905,9 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
   }
 
   // 修改手机号对话框
-  void _showChangePhoneDialog() {
+  void _showChangePhoneDialog() async {
+    await _fetchUserInfo();
+    
     final TextEditingController phoneController = TextEditingController();
     final TextEditingController codeController = TextEditingController();
     
@@ -980,6 +918,9 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            const SizedBox(height: 8),
+            Text('原手机号：$_phone'),
+            const SizedBox(height: 16),
             TextField(
               controller: phoneController,
               decoration: const InputDecoration(
@@ -1049,7 +990,9 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
   }
 
   // 修改邮箱对话框
-  void _showChangeEmailDialog() {
+  void _showChangeEmailDialog() async {
+    await _fetchUserInfo();
+    
     final TextEditingController oldCodeController = TextEditingController();
     final TextEditingController newEmailController = TextEditingController();
     final TextEditingController newCodeController = TextEditingController();
@@ -1062,6 +1005,9 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text('第一步：验证原邮箱'),
+            const SizedBox(height: 8),
+            Text('原邮箱：$_email'),
+            const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
@@ -1242,7 +1188,9 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
     );
   }
   // 修改身份对话框
-  void _showChangeIdentityDialog() {
+  void _showChangeIdentityDialog() async {
+    await _fetchUserInfo();
+    
     final TextEditingController identityController = TextEditingController(text: _identity);
     
     showDialog(
@@ -1285,7 +1233,9 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
     );
   }
   // 修改疾病史对话框
-  void _showChangeIllsDialog() {
+  void _showChangeIllsDialog() async {
+    await _fetchUserInfo();
+    
     final TextEditingController illsController = TextEditingController(text: _ills);
     
     showDialog(
@@ -1330,7 +1280,9 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
   }
 
   // 修改年龄对话框
-  void _showChangeAgeDialog() {
+  void _showChangeAgeDialog() async {
+    await _fetchUserInfo();
+    
     final TextEditingController ageController = TextEditingController(text: _age.toString());
     
     showDialog(
@@ -1390,7 +1342,9 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
   }
 
   // 修改身高对话框
-  void _showChangeHeightDialog() {
+  void _showChangeHeightDialog() async {
+    await _fetchUserInfo();
+    
     final TextEditingController heightController = TextEditingController(text: _height > 0 ? _height.toString() : '');
     
     showDialog(
@@ -1450,7 +1404,9 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
   }
 
   // 修改体重对话框
-  void _showChangeWeightDialog() {
+  void _showChangeWeightDialog() async {
+    await _fetchUserInfo();
+    
     final TextEditingController weightController = TextEditingController(text: _weight > 0 ? _weight.toString() : '');
     
     showDialog(
@@ -1537,6 +1493,49 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
         _userId = userId;
       });
     }
+    
+    try {
+      final userInfoJson = prefs.getString('user_info');
+      if (userInfoJson != null) {
+        final userInfo = jsonDecode(userInfoJson);
+        print('从本地存储读取到用户信息: $userInfo');
+        
+        if (mounted) {
+          setState(() {
+            _email = userInfo['email'] ?? '';
+            _age = userInfo['age'] ?? 0;
+            _height = userInfo['height'] ?? 0.0;
+            _weight = userInfo['weight'] ?? 0.0;
+            _identity = userInfo['identity'] ?? '';
+            _ills = userInfo['ills'] ?? '';
+            _isDataLoaded = true;
+          });
+        }
+      }
+    } catch (e) {
+      print('从本地存储读取用户信息失败: $e');
+    }
+  }
+
+  // 保存用户信息到本地存储
+  Future<void> _saveUserInfoToStorage() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userInfo = {
+        'phone': _phone,
+        'email': _email,
+        'age': _age,
+        'height': _height,
+        'weight': _weight,
+        'identity': _identity,
+        'ills': _ills,
+      };
+      final userInfoJson = jsonEncode(userInfo);
+      await prefs.setString('user_info', userInfoJson);
+      print('用户信息已保存到本地存储');
+    } catch (e) {
+      print('保存用户信息到本地存储失败: $e');
+    }
   }
 
   // 从后端获取用户详细信息
@@ -1593,6 +1592,8 @@ class ProfilePageState extends State<ProfilePage> with SingleTickerProviderState
                 _isDataLoaded = true;
                 print('设置_isDataLoaded为true');
               });
+              // 保存用户信息到本地存储
+              await _saveUserInfoToStorage();
               // 启动动画
               _animationController.forward();
             }

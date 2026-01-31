@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:vector_math/vector_math.dart' as vm;
+import '../utils/bluetooth_global_state.dart';
 
 // API配置类
 class ApiConfig {
@@ -39,12 +40,8 @@ class ThreeDPage extends StatefulWidget {
 }
 
 class ThreeDPageState extends State<ThreeDPage> {
-  // 蓝牙连接状态
-  bool _isBluetoothConnected = false;
-  // 设备名称
-  String _deviceName = '未连接设备';
-  // 校准状态
-  bool _isCalibrated = false;
+  final BluetoothGlobalState _bluetoothGlobalState = BluetoothGlobalState();
+
   // 姿态状态
   String _postureState = '初始化';
   // 仰俯角
@@ -55,8 +52,6 @@ class ThreeDPageState extends State<ThreeDPage> {
   double _yawAngle = 0.0;
   // 风险等级
   String _riskLevel = '正常';
-  // 蓝牙设备
-  BluetoothDevice? _connectedDevice;
   // 蓝牙服务
   BluetoothService? _bluetoothService;
   // 蓝牙特征值
@@ -116,25 +111,16 @@ class ThreeDPageState extends State<ThreeDPage> {
         
         if (connectedDevices.isNotEmpty) {
           // 实际有设备连接，更新状态
-          setState(() {
-            _isBluetoothConnected = true;
-            _deviceName = connectedDevices.first.name.isEmpty ? '未知设备' : connectedDevices.first.name;
-          });
-          print('实际检测到已连接的设备: $_deviceName');
+          _bluetoothGlobalState.setBluetoothConnected(true, connectedDevices.first, connectedDevices.first.name.isEmpty ? '未知设备' : connectedDevices.first.name);
+          print('实际检测到已连接的设备: ${_bluetoothGlobalState.deviceName}');
         } else {
           // 实际没有设备连接，更新状态
-          setState(() {
-            _isBluetoothConnected = false;
-            _deviceName = '未连接设备';
-          });
+          _bluetoothGlobalState.setBluetoothConnected(false, null, '未连接设备');
           print('实际检测到未连接设备');
         }
       } else {
         // 蓝牙未开启，更新状态
-        setState(() {
-          _isBluetoothConnected = false;
-          _deviceName = '未连接设备';
-        });
+        _bluetoothGlobalState.setBluetoothConnected(false, null, '未连接设备');
         print('蓝牙未开启');
       }
     } catch (error) {
@@ -168,7 +154,7 @@ class ThreeDPageState extends State<ThreeDPage> {
       if (!isScanning) {
         print('扫描完成');
         // 只有在校准后才尝试重连
-        if (!_isBluetoothConnected && _isCalibrated) {
+        if (!_bluetoothGlobalState.isBluetoothConnected && _bluetoothGlobalState.isCalibrated) {
           print('未找到设备，3秒后重新扫描');
           Future.delayed(Duration(seconds: 3), () {
             _scanForDevices();
@@ -183,21 +169,14 @@ class ThreeDPageState extends State<ThreeDPage> {
     print('连接到设备: ${device.name}');
     device.connect(autoConnect: true).then((_) {
       print('设备连接成功: ${device.name}');
-      setState(() {
-        _isBluetoothConnected = true;
-        _deviceName = device.name;
-        _connectedDevice = device;
-      });
+      _bluetoothGlobalState.setBluetoothConnected(true, device, device.name);
       // 发现服务
       _discoverServices(device);
     }).catchError((error) {
       print('设备连接失败: $error');
-      setState(() {
-        _isBluetoothConnected = false;
-        _deviceName = '连接失败';
-      });
+      _bluetoothGlobalState.setBluetoothConnected(false, null, '连接失败');
       // 只有在校准后才尝试重连
-      if (_isCalibrated) {
+      if (_bluetoothGlobalState.isCalibrated) {
         // 尝试重连
         Future.delayed(Duration(seconds: 3), () {
           _scanForDevices();
@@ -209,22 +188,14 @@ class ThreeDPageState extends State<ThreeDPage> {
       print('设备连接状态: $state');
       if (state == BluetoothConnectionState.connected) {
         print('设备已连接');
-        setState(() {
-          _isBluetoothConnected = true;
-          _deviceName = device.name;
-          _connectedDevice = device;
-        });
+        _bluetoothGlobalState.setBluetoothConnected(true, device, device.name);
       } else if (state == BluetoothConnectionState.disconnected) {
         print('设备断开连接');
-        setState(() {
-          _isBluetoothConnected = false;
-          _deviceName = '未连接设备';
-          _connectedDevice = null;
-          _bluetoothService = null;
-          _postureCharacteristic = null;
-        });
+        _bluetoothGlobalState.setBluetoothConnected(false, null, '未连接设备');
+        _bluetoothService = null;
+        _postureCharacteristic = null;
         // 只有在校准后才尝试重连
-        if (_isCalibrated) {
+        if (_bluetoothGlobalState.isCalibrated) {
           // 尝试重连
           Future.delayed(Duration(seconds: 3), () {
             _scanForDevices();
@@ -269,13 +240,13 @@ class ThreeDPageState extends State<ThreeDPage> {
   // 处理蓝牙数据
   void _processBluetoothData(List<int> value) {
     // 只有在校准状态为已校准的情况下才处理蓝牙数据
-    if (!_isCalibrated) {
+    if (!_bluetoothGlobalState.isCalibrated) {
       print('校准状态未完成，暂不处理蓝牙数据');
       return;
     }
     
     // 只有在蓝牙连接状态为已连接的情况下才处理蓝牙数据
-    if (!_isBluetoothConnected) {
+    if (!_bluetoothGlobalState.isBluetoothConnected) {
       print('蓝牙未连接，暂不处理蓝牙数据');
       return;
     }
@@ -378,7 +349,7 @@ class ThreeDPageState extends State<ThreeDPage> {
   // 开始校准
   void _startCalibration() {
     // 检查蓝牙连接状态
-    if (!_isBluetoothConnected) {
+    if (!_bluetoothGlobalState.isBluetoothConnected) {
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -443,9 +414,7 @@ class ThreeDPageState extends State<ThreeDPage> {
       if (mounted) {
         Navigator.pop(context);
         // 设置校准状态为已校准
-        setState(() {
-          _isCalibrated = true;
-        });
+        _bluetoothGlobalState.setCalibrated(true);
         // 显示校准完成提示
         showDialog(
           context: context,
@@ -481,7 +450,7 @@ class ThreeDPageState extends State<ThreeDPage> {
   // 模拟姿态数据，用于测试模型动画
   void _simulatePostureData() {
     // 只有在校准状态为已校准的情况下才模拟数据
-    if (!_isCalibrated) {
+    if (!_bluetoothGlobalState.isCalibrated) {
       return;
     }
     
@@ -502,8 +471,8 @@ class ThreeDPageState extends State<ThreeDPage> {
       _dataTransmitTimer!.cancel();
     }
     // 断开蓝牙连接
-    if (_connectedDevice != null) {
-      _connectedDevice!.disconnect();
+    if (_bluetoothGlobalState.connectedDevice != null) {
+      _bluetoothGlobalState.connectedDevice!.disconnect();
     }
     // 停止蓝牙扫描
     FlutterBluePlus.stopScan();
@@ -564,14 +533,14 @@ class ThreeDPageState extends State<ThreeDPage> {
                               Row(
                                 children: [
                                   Icon(
-                                    _isBluetoothConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
-                                    color: _isBluetoothConnected ? Colors.green : Colors.red,
+                                    _bluetoothGlobalState.isBluetoothConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
+                                    color: _bluetoothGlobalState.isBluetoothConnected ? Colors.green : Colors.red,
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
-                                    _isBluetoothConnected ? '已连接' : '未连接',
+                                    _bluetoothGlobalState.isBluetoothConnected ? '已连接' : '未连接',
                                     style: TextStyle(
-                                      color: _isBluetoothConnected ? Colors.green : Colors.red,
+                                      color: _bluetoothGlobalState.isBluetoothConnected ? Colors.green : Colors.red,
                                     ),
                                   ),
                                 ],
@@ -579,15 +548,15 @@ class ThreeDPageState extends State<ThreeDPage> {
                               
                               // 设备名称
                               Text(
-                                '设备: $_deviceName',
+                                '设备: ${_bluetoothGlobalState.deviceName}',
                                 style: const TextStyle(color: Colors.white),
                               ),
                               
                               // 校准状态
                               Text(
-                                '校准: ${_isCalibrated ? '已校准' : '未校准'}',
+                                '校准: ${_bluetoothGlobalState.isCalibrated ? '已校准' : '未校准'}',
                                 style: TextStyle(
-                                  color: _isCalibrated ? Colors.green : Colors.orange,
+                                  color: _bluetoothGlobalState.isCalibrated ? Colors.green : Colors.orange,
                                 ),
                               ),
                               
@@ -648,7 +617,7 @@ class ThreeDPageState extends State<ThreeDPage> {
                         flex: 2,
                         child: Container(
                           child: Center(
-                            child: _isCalibrated ?
+                            child: _bluetoothGlobalState.isCalibrated ?
                               Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
