@@ -35,6 +35,17 @@ __pycache__/
 # 临时脚本
 check_db.py
 
+# 测试脚本
+server/Sync/check_*.py
+server/Sync/clear_records.py
+server/Sync/delete_all_records.py
+server/Sync/fake_posture_data.py
+server/Sync/reset_sequence.py
+server/Sync/cleanup_old_records.py
+
+# 测试目录
+test_extract/
+
 # 操作系统文件
 .DS_Store
 Thumbs.db
