@@ -7,30 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:vector_math/vector_math.dart' as vm;
 import '../utils/bluetooth_global_state.dart';
-
-// API配置类
-class ApiConfig {
-  // API基础地址
-  // 注意：在手机上测试时，需要使用电脑的局域网IP地址
-  static const String baseUrl = 'http://192.168.118.186:8000/api';
-  
-  // 登录接口
-  static const String loginUrl = '$baseUrl/posture/login/';
-  
-  // 注册接口
-  static const String registerUrl = '$baseUrl/posture/register/';
-  
-  // 发送验证码接口
-  static const String sendCodeUrl = '$baseUrl/posture/send-code/';
-  
-  // N8N处理消息接口
-  static const String n8nUrl = '$baseUrl/posture/n8n/';
-  
-  // 蓝牙数据接口
-  static const String bluetoothUrl = '$baseUrl/posture/bluetooth/';
-}
-
-
+import '../config/api_config.dart';
 
 class ThreeDPage extends StatefulWidget {
   const ThreeDPage({super.key});
@@ -64,18 +41,22 @@ class ThreeDPageState extends State<ThreeDPage> {
   @override
   void initState() {
     super.initState();
-    // 读取保存的设备连接状态
-    _loadSavedDeviceConnectionStatus();
     // 启动定期获取姿态数据的任务
     _startFetchingPostureData();
-    // 自动扫描蓝牙设备
-    Future.delayed(Duration(seconds: 2), () {
-      _scanForDevices();
-    });
     // 模拟3D模型加载完成
     Future.delayed(Duration(seconds: 1), () {
-      setState(() {
-        _isModelLoaded = true;
+      if (mounted) {
+        setState(() {
+          _isModelLoaded = true;
+        });
+      }
+    });
+    // 蓝牙操作在页面渲染完成后再执行，避免阻塞主线程
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadSavedDeviceConnectionStatus();
+      // 延迟2秒后扫描蓝牙设备
+      Future.delayed(Duration(seconds: 2), () {
+        _scanForDevices();
       });
     });
   }
@@ -83,7 +64,7 @@ class ThreeDPageState extends State<ThreeDPage> {
   // 读取保存的设备连接状态并检查实际连接状态
   Future<void> _loadSavedDeviceConnectionStatus() async {
     try {
-      // 1. 首先读取保存的设备连接状态
+      // 1. 读取本地保存的状态（很快，不阻塞）
       SharedPreferences prefs = await SharedPreferences.getInstance();
       bool? isDeviceConnected = prefs.getBool('isDeviceConnected');
       String? deviceName = prefs.getString('deviceName');
@@ -92,36 +73,28 @@ class ThreeDPageState extends State<ThreeDPage> {
         print('读取保存的设备连接状态: $isDeviceConnected, $deviceName');
       }
       
-      // 2. 然后检查实际的蓝牙连接状态
-      bool isBluetoothOn = false;
-      try {
-        isBluetoothOn = await FlutterBluePlus.isOn;
-      } catch (e) {
-        print('检查蓝牙状态时出错: $e');
+      // 2. 检查蓝牙状态（异步，不阻塞主线程）
+      bool isBluetoothOn = await FlutterBluePlus.isOn;
+      
+      if (!isBluetoothOn) {
+        print('蓝牙未开启');
+        _bluetoothGlobalState.setBluetoothConnected(false, null, '未连接设备');
+        return;
       }
       
-      if (isBluetoothOn) {
-        // 获取已连接的设备列表
-        List<BluetoothDevice> connectedDevices = [];
-        try {
-          connectedDevices = FlutterBluePlus.connectedDevices;
-        } catch (e) {
-          print('获取已连接设备列表时出错: $e');
-        }
-        
-        if (connectedDevices.isNotEmpty) {
-          // 实际有设备连接，更新状态
-          _bluetoothGlobalState.setBluetoothConnected(true, connectedDevices.first, connectedDevices.first.name.isEmpty ? '未知设备' : connectedDevices.first.name);
-          print('实际检测到已连接的设备: ${_bluetoothGlobalState.deviceName}');
-        } else {
-          // 实际没有设备连接，更新状态
-          _bluetoothGlobalState.setBluetoothConnected(false, null, '未连接设备');
-          print('实际检测到未连接设备');
-        }
+      // 3. 获取已连接的设备
+      List<BluetoothDevice> connectedDevices = FlutterBluePlus.connectedDevices;
+      
+      if (connectedDevices.isNotEmpty) {
+        _bluetoothGlobalState.setBluetoothConnected(
+          true, 
+          connectedDevices.first, 
+          connectedDevices.first.name.isEmpty ? '未知设备' : connectedDevices.first.name
+        );
+        print('实际检测到已连接的设备: ${_bluetoothGlobalState.deviceName}');
       } else {
-        // 蓝牙未开启，更新状态
         _bluetoothGlobalState.setBluetoothConnected(false, null, '未连接设备');
-        print('蓝牙未开启');
+        print('实际检测到未连接设备');
       }
     } catch (error) {
       print('读取设备连接状态时出错: $error');

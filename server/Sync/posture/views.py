@@ -383,10 +383,11 @@ def get_body_movement_data(request):
                     weekly_angle_stats = {}
                     
                     for record in records:
-                        # 计算是第几周（最多4周）
+                        # 按距离今天的天数计算（最近7天=第四周，最远21-27天=第一周）
                         days_since_start = (now.date() - record.start_time.date()).days
-                        week_num = min(days_since_start // 7, 3)  # 限制为0-3，即第1-4周
-                        week_label = f'第{week_num + 1}周'
+                        week_num = min(days_since_start // 7, 3)  # 限制为0-3
+                        # 反向编号：距离最近=第四周，距离最远=第一周
+                        week_label = f'第{4 - week_num}周'
                         
                         if week_label not in weekly_posture_stats:
                             weekly_posture_stats[week_label] = {
@@ -502,7 +503,8 @@ def get_body_movement_data(request):
                 for record in records:
                     days_since_start = (now.date() - record.start_time.date()).days
                     week_num = min(days_since_start // 7, 3)
-                    week_label = f'第{week_num + 1}周'
+                    # 反向编号：距离最近=第四周，距离最远=第一周
+                    week_label = f'第{4 - week_num}周'
                     
                     if week_label not in weekly_steps:
                         weekly_steps[week_label] = 0
@@ -513,9 +515,9 @@ def get_body_movement_data(request):
                     elif record.state == State.RUN.value:
                         weekly_steps[week_label] += int((duration / 60) * 160)
                 
-                # 生成4周的数据
-                for i in range(4):
-                    week_label = f'第{i + 1}周'
+                # 生成4周的数据（从第一周到第四周，从远到近）
+                for i in range(1, 5):
+                    week_label = f'第{i}周'
                     activity_trend.append({
                         'label': week_label,
                         'steps': weekly_steps.get(week_label, 0)

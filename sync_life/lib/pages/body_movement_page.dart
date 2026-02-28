@@ -87,7 +87,7 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
                       SizedBox(width: 12),
                       _buildTimeRangeButton('周', TimeRange.week),
                       SizedBox(width: 12),
-                      _buildTimeRangeButton('月', TimeRange.month),
+                      _buildTimeRangeButton('近一个月', TimeRange.month),
                     ],
                   ),
                 ),
@@ -147,7 +147,7 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
                           children: [
                             Text(
                               _selectedRange == TimeRange.day ? '今日姿态分布' : 
-                              _selectedRange == TimeRange.week ? '本周姿态分布' : '本月姿态分布',
+                              _selectedRange == TimeRange.week ? '本周姿态分布' : '近一个月姿态分布',
                               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                             ),
                             SizedBox(height: 16),
@@ -182,7 +182,7 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
                           children: [
                             Text(
                               _selectedRange == TimeRange.day ? '今日姿态占比' : 
-                              _selectedRange == TimeRange.week ? '本周姿态占比' : '本月姿态占比',
+                              _selectedRange == TimeRange.week ? '本周姿态占比' : '近一个月姿态占比',
                               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                             ),
                             SizedBox(height: 16),
@@ -212,7 +212,7 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
                           children: [
                             Text(
                               _selectedRange == TimeRange.day ? '今日活动趋势' : 
-                              _selectedRange == TimeRange.week ? '本周活动趋势' : '本月活动趋势',
+                              _selectedRange == TimeRange.week ? '本周活动趋势' : '近一个月活动趋势',
                               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                             ),
                             SizedBox(height: 20),
@@ -245,7 +245,7 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
                           children: [
                             Text(
                               _selectedRange == TimeRange.day ? '今日前俯角监测' : 
-                              _selectedRange == TimeRange.week ? '本周前俯角监测' : '本月前俯角监测',
+                              _selectedRange == TimeRange.week ? '本周前俯角监测' : '近一个月前俯角监测',
                               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                             ),
                             SizedBox(height: 16),
