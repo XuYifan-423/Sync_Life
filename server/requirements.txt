@@ -1,0 +1,16 @@
+asgiref==3.7.2
+Django==4.2.15
+sqlparse==0.5.0
+tzdata==2024.2
+psycopg==3.2.0
+
+# Smart clothing project dependencies
+numpy==1.26.4
+onnxruntime==1.19.2
+bleak==0.21.1
+scipy==1.10.1
+matplotlib==3.7.5
+pygame==2.6.1
+numpy-quaternion==2023.0.4
+requests==2.32.3
+tqdm==4.67.1

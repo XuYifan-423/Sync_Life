@@ -1,0 +1,5 @@
+必须参数：
+POSTGRES_PASSWORD PostgreSQL管理密码
+POSTGRES_DB PostgreSQL数据库名
+POSTGRES_USER 用户名
+POSTGRES_ADDR 数据库IP+端口

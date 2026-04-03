@@ -1,0 +1,4 @@
+前往 Sync-Life\sync_life\lib\config\api_config.dart  修改IP地址
+后端运行 cd Sync ; python manage.py runserver 0.0.0.0:8000
+n8n工作流也要改相关的网址，暂时未开源
+数据库由于是部署在本人电脑上的，未上传至云端服务器（没米），暂时不提供访问服务，看看视频得了

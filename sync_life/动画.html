@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>竖版沙滩角色动画（最终完美版）</title>
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  /* 竖版长方形画布 */
+  .beach-scene {
+    width: 400px;
+    height: 700px;
+    margin: 20px auto;
+    border: 2px solid #333;
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(to bottom, #87CEEB 0%, #87CEEB 70%, #F5DEB3 70%, #F5DEB3 100%);
+  }
+
+  /* 云 */
+  .cloud {
+    position: absolute;
+    background: white;
+    border-radius: 50%;
+    opacity: 0.85;
+  }
+  .cloud1 {
+    top: 80px; left: 50px;
+    width: 100px; height: 50px;
+    box-shadow: 15px 15px 0 8px white, -15px 15px 0 4px white;
+    animation: cloudMove 60s linear infinite;
+  }
+  .cloud2 {
+    top: 120px; left: 250px;
+    width: 80px; height: 40px;
+    box-shadow: 10px 10px 0 6px white, -10px 10px 0 3px white;
+    animation: cloudMove 80s linear infinite reverse;
+  }
+  @keyframes cloudMove {
+    0% { transform: translateX(-80px); }
+    100% { transform: translateX(480px); }
+  }
+
+  /* 海浪 */
+  .sea-wave {
+    position: absolute;
+    top: 70%;
+    left: 0;
+    width: 100%;
+    height: 15px;
+    background: #4682B4;
+    border-radius: 50%;
+    animation: waveMove 3s ease-in-out infinite alternate;
+    opacity: 0.7;
+  }
+  @keyframes waveMove {
+    0% { transform: scaleX(1); }
+    100% { transform: scaleX(1.05); }
+  }
+
+  /* 椅子：再往下挪！浅木色，位置精准 */
+  .chair {
+    position: absolute;
+    top: 70%; /* 核心修改：从68%调到70%，再往下挪 */
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 50px;
+    height: 32px;
+    background: #E6D3B8;
+    border-radius: 4px;
+    display: none;
+    z-index: 1;
+  }
+  .chair::before {
+    content: '';
+    position: absolute;
+    width: 40px;
+    height: 20px;
+    background: #D9C2A3;
+    top: -10px;
+    left: 5px;
+    border-radius: 3px;
+  }
+
+  /* 人物：贴在沙滩上 */
+  .character {
+    position: absolute;
+    top: 68%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100px;
+    height: 150px;
+    transform-origin: center bottom;
+    z-index: 2;
+  }
+
+  /* 头部 */
+  .head {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 44px;
+    height: 44px;
+    background: #fecd98;
+    border-radius: 50%;
+  }
+
+  /* 身体 */
+  .body {
+    position: absolute;
+    top: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 34px;
+    height: 50px;
+    background: #2E86AB;
+    border-radius: 8px 8px 0 0;
+  }
+
+  /* 手臂 */
+  .arm {
+    position: absolute;
+    width: 10px;
+    height: 32px;
+    background: #fecd98;
+    border-radius: 5px;
+    transform-origin: top center;
+  }
+  .arm.left { top: 45px; left: 8px; }
+  .arm.right{ top: 45px; right: 8px; }
+
+  /* 腿 */
+  .leg {
+    position: absolute;
+    width: 12px;
+    background: #8B4513;
+    border-radius: 5px;
+    transform-origin: top center;
+  }
+  .leg.left-up  { top: 90px; left: 30px; height: 32px; }
+  .leg.left-dn  { top: 122px; left: 30px; height: 28px; }
+  .leg.right-up { top: 90px; right: 30px; height: 32px; }
+  .leg.right-dn { top: 122px; right: 30px; height: 28px; }
+
+  /* 动作 */
+  @keyframes sit {
+    0%,100% { transform: translate(-50%, -50%); }
+    50%     { transform: translate(-50%, -52%); }
+  }
+  @keyframes stand {
+    0%,100% { transform: translate(-50%, -50%); }
+    50%     { transform: translate(-48%, -50%); }
+  }
+  @keyframes walk {
+    0% { 
+      transform: translate(-100px, -50%) scaleX(-1);
+      .leg.left-up { transform: rotate(30deg); }
+      .leg.left-dn { transform: rotate(-30deg); }
+      .leg.right-up { transform: rotate(-30deg); }
+      .leg.right-dn { transform: rotate(30deg); }
+      .arm.left { transform: rotate(-20deg); }
+      .arm.right { transform: rotate(20deg); }
+    }
+    50% { 
+      transform: translate(0px, -50%) scaleX(-1);
+      .leg.left-up { transform: rotate(-30deg); }
+      .leg.left-dn { transform: rotate(30deg); }
+      .leg.right-up { transform: rotate(30deg); }
+      .leg.right-dn { transform: rotate(-30deg); }
+      .arm.left { transform: rotate(20deg); }
+      .arm.right { transform: rotate(-20deg); }
+    }
+    100% { 
+      transform: translate(-100px, -50%) scaleX(-1);
+      .leg.left-up { transform: rotate(30deg); }
+      .leg.left-dn { transform: rotate(-30deg); }
+      .leg.right-up { transform: rotate(-30deg); }
+      .leg.right-dn { transform: rotate(30deg); }
+      .arm.left { transform: rotate(-20deg); }
+      .arm.right { transform: rotate(20deg); }
+    }
+  }
+  @keyframes run {
+    0% { 
+      transform: translate(-120px, -50%) scaleX(-1);
+      .leg.left-up { transform: rotate(45deg); }
+      .leg.left-dn { transform: rotate(-45deg); }
+      .leg.right-up { transform: rotate(-45deg); }
+      .leg.right-dn { transform: rotate(45deg); }
+      .arm.left { transform: rotate(-40deg); }
+      .arm.right { transform: rotate(40deg); }
+    }
+    50% { 
+      transform: translate(20px, -50%) scaleX(-1);
+      .leg.left-up { transform: rotate(-45deg); }
+      .leg.left-dn { transform: rotate(45deg); }
+      .leg.right-up { transform: rotate(45deg); }
+      .leg.right-dn { transform: rotate(-45deg); }
+      .arm.left { transform: rotate(40deg); }
+      .arm.right { transform: rotate(-40deg); }
+    }
+    100% { 
+      transform: translate(-120px, -50%) scaleX(-1);
+      .leg.left-up { transform: rotate(45deg); }
+      .leg.left-dn { transform: rotate(-45deg); }
+      .leg.right-up { transform: rotate(-45deg); }
+      .leg.right-dn { transform: rotate(45deg); }
+      .arm.left { transform: rotate(-40deg); }
+      .arm.right { transform: rotate(40deg); }
+    }
+  }
+  @keyframes lie {
+    0%,100% { transform: translate(-50%, -50%) rotate(90deg); }
+    50%     { transform: translate(-48%, -48%) rotate(90deg); }
+  }
+
+  /* 按钮 */
+  .action-buttons {
+    text-align: center;
+    margin-top: 20px;
+  }
+  .action-btn {
+    padding: 10px 20px;
+    margin: 0 5px;
+    border: none;
+    background: #2E86AB;
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+  }
+  .action-btn:hover {
+    background: #1B5F85;
+  }
+</style>
+</head>
+<body>
+
+<div class="beach-scene">
+  <div class="cloud cloud1"></div>
+  <div class="cloud cloud2"></div>
+  <div class="sea-wave"></div>
+  <div class="chair" id="chair"></div>
+
+  <div class="character" id="chara">
+    <div class="head"></div>
+    <div class="body"></div>
+    <div class="arm left"></div>
+    <div class="arm right"></div>
+    <div class="leg left-up"></div>
+    <div class="leg left-dn"></div>
+    <div class="leg right-up"></div>
+    <div class="leg right-dn"></div>
+  </div>
+</div>
+
+<div class="action-buttons">
+  <button class="action-btn" onclick="sit()">静坐</button>
+  <button class="action-btn" onclick="stand()">站立</button>
+  <button class="action-btn" onclick="walk()">走路</button>
+  <button class="action-btn" onclick="run()">跑步</button>
+  <button class="action-btn" onclick="lie()">躺卧</button>
+</div>
+
+<script>
+  const chara = document.getElementById('chara');
+  const chair = document.getElementById('chair');
+
+  function reset() {
+    chara.style.animation = '';
+    chair.style.display = 'none';
+    document.querySelectorAll('.arm,.leg').forEach(e => e.style.transform = '');
+  }
+
+  function sit() {
+    reset();
+    chair.style.display = 'block';
+    chara.style.animation = 'sit 3s ease-in-out infinite alternate';
+    document.querySelector('.leg.left-up').style.transform = 'rotate(-60deg)';
+    document.querySelector('.leg.left-dn').style.transform = 'rotate(40deg)';
+    document.querySelector('.leg.right-up').style.transform = 'rotate(-60deg)';
+    document.querySelector('.leg.right-dn').style.transform = 'rotate(40deg)';
+  }
+
+  function stand() {
+    reset();
+    chara.style.animation = 'stand 2.5s ease-in-out infinite alternate';
+  }
+
+  function walk() {
+    reset();
+    chara.style.animation = 'walk 3s linear infinite';
+  }
+
+  function run() {
+    reset();
+    chara.style.animation = 'run 1.5s linear infinite';
+  }
+
+  function lie() {
+    reset();
+    chara.style.animation = 'lie 3s ease-in-out infinite alternate';
+  }
+</script>
+</body>
+</html>
