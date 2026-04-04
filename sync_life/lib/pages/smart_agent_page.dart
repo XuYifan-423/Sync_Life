@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'dart:math'; // 添加dart:math库，用于sin函数
+import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../config/api_config.dart';
 import '../utils/training_plan_storage.dart';
 
@@ -155,6 +158,25 @@ class _SmartAgentPageState extends State<SmartAgentPage> {
     _processMessageWithN8N(messageText);
   }
   
+  // 检测消息是否包含特定关键词
+  bool _containsKeyTopics(String message) {
+    final keyTopics = [
+      '训练计划',
+      '健康餐馆',
+      '健康建议',
+      '姿势纠正',
+      '姿态',
+      '健康'
+    ];
+    
+    for (final topic in keyTopics) {
+      if (message.contains(topic)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   // 调用后端API处理消息
   Future<void> _processMessageWithN8N(String messageText) async {
     if (_userId == null) {
@@ -175,11 +197,79 @@ class _SmartAgentPageState extends State<SmartAgentPage> {
     try {
       // 获取用户信息
       final userInfo = await _getUserInfo();
-      // 获取姿态占比数据
-      final postureData = await _getPostureDistribution();
+      
+      // 检测消息是否包含关键词，如果包含则获取姿态数据
+      Map<String, dynamic>? postureData;
+      String detailedMessage = messageText;
+      
+      if (_containsKeyTopics(messageText)) {
+        postureData = await _getPostureDistribution();
+        print('检测到关键词，获取姿态数据: $postureData');
+        
+        // 如果有姿态数据，添加到消息中
+        if (postureData != null) {
+          detailedMessage += '\n\n近一个月姿态占比：\n';
+          if (postureData['posture_distribution'] != null) {
+            for (var item in postureData['posture_distribution']) {
+              detailedMessage += '- ${item['name']}：${item['value']}% (${item['hours']})\n';
+            }
+          }
+          detailedMessage += '\n活动数据：\n';
+          detailedMessage += '- 步数：${postureData['steps'] ?? 0}\n';
+          detailedMessage += '- 卡路里：${postureData['calories'] ?? 0}\n';
+          detailedMessage += '- 距离：${postureData['distance'] ?? 0}km\n';
+          detailedMessage += '- 活动时间：${postureData['active_time'] ?? 0}min\n';
+          
+          // 添加活动趋势数据
+          if (postureData['activity_trend'] != null) {
+            detailedMessage += '\n每周活动趋势：\n';
+            for (var item in postureData['activity_trend']) {
+              detailedMessage += '- ${item['label']}：${item['steps']}步\n';
+            }
+          }
+          
+          // 添加姿态详细数据
+          if (postureData['postures'] != null) {
+            detailedMessage += '\n姿态详细数据：\n';
+            for (var item in postureData['postures']) {
+              detailedMessage += '- ${item['date'] ?? item['label']}：\n';
+              if (item['sitting'] != null) detailedMessage += '  坐姿：${item['sitting']}小时\n';
+              if (item['standing'] != null) detailedMessage += '  站姿：${item['standing']}小时\n';
+              if (item['walking'] != null) detailedMessage += '  行走：${item['walking']}小时\n';
+              if (item['running'] != null) detailedMessage += '  跑步：${item['running']}小时\n';
+              if (item['lying'] != null) detailedMessage += '  躺姿：${item['lying']}小时\n';
+            }
+          }
+          
+          // 添加姿态角度数据
+          if (postureData['posture_angles'] != null) {
+            detailedMessage += '\n姿态角度数据：\n';
+            // 添加年龄组定义
+            detailedMessage += '年龄组定义：\n';
+            detailedMessage += '- 青年组：11-24岁\n';
+            detailedMessage += '- 壮年组：25-44岁\n';
+            detailedMessage += '- 中年组：45-59岁\n';
+            detailedMessage += '- 老年组：60岁及以上\n\n';
+            // 添加角度范围定义
+            detailedMessage += '角度范围定义：\n';
+            detailedMessage += '- 正常：标准范围内的角度\n';
+            detailedMessage += '- 轻微异常：偏离标准范围中点的偏差≤10度（老年组≤12度）\n';
+            detailedMessage += '- 严重异常：偏离标准范围中点的偏差>10度（老年组>12度）\n\n';
+            for (var item in postureData['posture_angles']) {
+              detailedMessage += '- ${item['time'] ?? item['date'] ?? item['week'] ?? item['label']}：\n';
+              if (item['angle'] != null) detailedMessage += '  前俯角：${item['angle']}\n';
+              if (item['status'] != null) detailedMessage += '  状态：${item['status']}\n';
+              if (item['normal'] != null) detailedMessage += '  正常：${item['normal']}小时\n';
+              if (item['mild'] != null) detailedMessage += '  轻微异常：${item['mild']}小时\n';
+              if (item['severe'] != null) detailedMessage += '  严重异常：${item['severe']}小时\n';
+            }
+          }
+        }
+      }
       
       print('开始调用N8N API');
       print('API URL: ${ApiConfig.n8nUrl}');
+      print('详细消息: $detailedMessage');
       
       final response = await http.post(
         Uri.parse(ApiConfig.n8nUrl),
@@ -188,11 +278,11 @@ class _SmartAgentPageState extends State<SmartAgentPage> {
         },
         body: jsonEncode({
           'user_id': _userId,
-          'message': messageText,
+          'message': detailedMessage,
           'session_id': _sessionId,
           'type': 'text',
-          'user_info': userInfo, // 传递用户信息
-          'posture_data': postureData, // 传递姿态占比数据
+          'user_info': userInfo,
+          'posture_data': postureData,
         }),
       );
       
@@ -204,11 +294,15 @@ class _SmartAgentPageState extends State<SmartAgentPage> {
         print('解析后的响应数据: $data');
         String aiResponse = data['response'] ?? '抱歉，我无法理解您的问题，请尝试换一种方式提问。';
         
-        // 过滤AI思考过程，只保留实际内容
-        aiResponse = _filterThinkingProcess(aiResponse);
+        // 先检测是否包含训练计划JSON
+        final trainingPlanResult = _extractAndFixTrainingPlan(aiResponse);
+        final hasTrainingPlan = trainingPlanResult['hasTrainingPlan'] as bool;
         
-        // 尝试从AI响应中检测训练计划（不自动保存）
-        final hasTrainingPlan = _detectTrainingPlan(aiResponse);
+        // 如果不包含训练计划，才过滤AI思考过程
+        String finalResponse = aiResponse;
+        if (!hasTrainingPlan) {
+          finalResponse = _filterThinkingProcess(aiResponse);
+        }
         
         if (mounted) {
           setState(() {
@@ -216,7 +310,7 @@ class _SmartAgentPageState extends State<SmartAgentPage> {
             _messages.removeWhere((message) => message.isLoading);
             // 添加实际的回复消息
             _messages.add(Message(
-              text: aiResponse,
+              text: finalResponse,
               isUser: false,
               timestamp: DateTime.now(),
               hasCalendarOption: hasTrainingPlan,
@@ -417,6 +511,43 @@ class _SmartAgentPageState extends State<SmartAgentPage> {
       return null;
     } catch (e) {
       print('获取姿态占比数据失败: $e');
+      return null;
+    }
+  }
+
+  // 获取当前位置
+  Future<Map<String, double>?> _getCurrentLocation() async {
+    try {
+      print('开始获取位置...');
+      
+      // 直接请求权限
+      LocationPermission permission = await Geolocator.requestPermission();
+      print('权限状态: $permission');
+      
+      if (permission == LocationPermission.denied || 
+          permission == LocationPermission.deniedForever) {
+        print('定位权限被拒绝');
+        return null;
+      }
+
+      print('权限检查通过，开始获取位置...');
+      
+      // 获取当前位置，使用Android原生LocationManager
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.best,
+        forceAndroidLocationManager: true,  // 强制使用Android原生定位
+        timeLimit: const Duration(seconds: 30),
+      );
+
+      print('成功获取位置: 纬度=${position.latitude}, 经度=${position.longitude}');
+      print('定位精度: ${position.accuracy}米');
+      
+      return {
+        'latitude': position.latitude,
+        'longitude': position.longitude,
+      };
+    } catch (e) {
+      print('获取位置失败: $e');
       return null;
     }
   }
@@ -665,6 +796,11 @@ class _SmartAgentPageState extends State<SmartAgentPage> {
           braceCount++;
         } else if (cleanedResponse[i] == '}') {
           braceCount--;
+          // 防止braceCount变为负数（处理多余的右括号）
+          if (braceCount < 0) {
+            braceCount = 0;
+            continue; // 跳过这个多余的右括号，继续寻找
+          }
           if (braceCount == 0) {
             endIndex = i + 1;
             break;
@@ -680,9 +816,10 @@ class _SmartAgentPageState extends State<SmartAgentPage> {
       final jsonString = cleanedResponse.substring(startIndex, endIndex);
       print('提取的JSON字符串长度: ${jsonString.length}');
       
+      String sanitizedJson = jsonString;
       try {
         // 清理JSON字符串中的非法字符
-        String sanitizedJson = jsonString
+        sanitizedJson = jsonString
             .replaceAll('\u0000', '')
             .replaceAll('\u0001', '')
             .replaceAll('\u0002', '')
@@ -729,6 +866,7 @@ class _SmartAgentPageState extends State<SmartAgentPage> {
         
         // 修复未闭合的引号问题
         sanitizedJson = _fixUnclosedQuotes(sanitizedJson);
+        print('清理后的JSON字符串: $sanitizedJson');
         
         final trainingPlan = jsonDecode(sanitizedJson);
         print('解析后的训练计划: $trainingPlan');
@@ -745,6 +883,8 @@ class _SmartAgentPageState extends State<SmartAgentPage> {
         }
       } catch (jsonError) {
         print('JSON解析失败: $jsonError');
+        print('原始JSON字符串: $jsonString');
+        print('清理后的JSON字符串: $sanitizedJson');
         // 尝试使用更宽松的解析方式
         try {
           // 简化验证，只要有plan字段就认为是训练计划
@@ -847,6 +987,11 @@ class _SmartAgentPageState extends State<SmartAgentPage> {
           braceCount++;
         } else if (cleanedResponse[i] == '}') {
           braceCount--;
+          // 防止braceCount变为负数（处理多余的右括号）
+          if (braceCount < 0) {
+            braceCount = 0;
+            continue; // 跳过这个多余的右括号，继续寻找
+          }
           if (braceCount == 0) {
             endIndex = i + 1;
             break;
@@ -862,9 +1007,12 @@ class _SmartAgentPageState extends State<SmartAgentPage> {
       final jsonString = cleanedResponse.substring(startIndex, endIndex);
       print('提取的JSON字符串长度: ${jsonString.length}');
       
+      String sanitizedJson = jsonString;
+      Map<String, dynamic>? trainingPlan;
+      
       try {
         // 清理JSON字符串中的非法字符
-        String sanitizedJson = jsonString
+        sanitizedJson = jsonString
             .replaceAll('\u0000', '')
             .replaceAll('\u0001', '')
             .replaceAll('\u0002', '')
@@ -904,24 +1052,46 @@ class _SmartAgentPageState extends State<SmartAgentPage> {
             .replaceAll('。', '.')
             .replaceAll('；', ';')
             .replaceAll('：', ':')
-            .replaceAll('“', '"')
-            .replaceAll('”', '"')
-            .replaceAll('‘', "'")
-            .replaceAll('’', "'");
+            .replaceAll('"', '"')
+            .replaceAll('"', '"')
+            .replaceAll("'", "'")
+            .replaceAll("'", "'");
         
-        final trainingPlan = jsonDecode(sanitizedJson);
+        // 修复未闭合的引号问题
+        sanitizedJson = _fixUnclosedQuotes(sanitizedJson);
+        print('清理后的JSON字符串: $sanitizedJson');
+        
+        trainingPlan = jsonDecode(sanitizedJson);
         print('解析后的训练计划: $trainingPlan');
+      } catch (jsonError) {
+        print('JSON解析失败: $jsonError');
+        print('尝试使用宽松模式提取训练计划...');
         
+        // 宽松模式：即使JSON解析失败，也尝试提取plan字段
+        trainingPlan = _extractPlanLoosely(cleanedResponse);
+      }
+      
+      if (trainingPlan != null) {
         // 验证训练计划格式
-        if (trainingPlan is Map && 
-            trainingPlan.containsKey('plan') && 
-            trainingPlan['plan'] is List) {
+        if (trainingPlan.containsKey('plan') && trainingPlan['plan'] is List) {
           final Map<String, dynamic> stringKeyMap = {};
           trainingPlan.forEach((key, value) {
             if (key is String) {
               stringKeyMap[key] = value;
             }
           });
+          
+          // 处理plan列表，删除所有day字段（周几信息）
+          if (stringKeyMap.containsKey('plan') && stringKeyMap['plan'] is List) {
+            List planList = stringKeyMap['plan'];
+            for (var dayPlan in planList) {
+              if (dayPlan is Map) {
+                // 删除day字段（周几信息）
+                dayPlan.remove('day');
+              }
+            }
+          }
+          
           await _saveTrainingPlan(stringKeyMap);
           print('训练计划保存成功');
           return true;
@@ -929,14 +1099,152 @@ class _SmartAgentPageState extends State<SmartAgentPage> {
           print('训练计划格式不正确');
           return false;
         }
-      } catch (jsonError) {
-        print('JSON解析失败: $jsonError');
+      } else {
+        print('无法提取训练计划');
         return false;
       }
     } catch (e) {
       print('提取训练计划失败: $e');
       print('错误详情: ${e.toString()}');
       return false;
+    }
+  }
+  
+  // 宽松模式提取训练计划
+  Map<String, dynamic>? _extractPlanLoosely(String response) {
+    try {
+      print('开始宽松模式提取训练计划...');
+      
+      // 尝试找到plan字段的开始和结束
+      int planStart = response.indexOf('"plan"');
+      if (planStart == -1) {
+        planStart = response.indexOf("'plan'");
+      }
+      
+      if (planStart == -1) {
+        print('未找到plan字段');
+        return null;
+      }
+      
+      // 找到plan字段后面的冒号和数组开始
+      int arrayStart = response.indexOf('[', planStart);
+      if (arrayStart == -1) {
+        print('未找到数组开始标记');
+        return null;
+      }
+      
+      // 找到匹配的数组结束括号
+      int bracketCount = 0;
+      int arrayEnd = -1;
+      for (int i = arrayStart; i < response.length; i++) {
+        if (response[i] == '[') {
+          bracketCount++;
+        } else if (response[i] == ']') {
+          bracketCount--;
+          if (bracketCount == 0) {
+            arrayEnd = i + 1;
+            break;
+          }
+        }
+      }
+      
+      if (arrayEnd == -1) {
+        print('未找到数组结束标记');
+        return null;
+      }
+      
+      // 提取plan数组字符串
+      String planArrayStr = response.substring(arrayStart, arrayEnd);
+      print('提取的plan数组字符串: $planArrayStr');
+      
+      // 尝试解析plan数组
+      try {
+        List<dynamic> planList = jsonDecode(planArrayStr);
+        print('成功解析plan数组，包含${planList.length}个训练日');
+        
+        return {
+          'plan': planList,
+          'summary': '从AI响应中提取的训练计划'
+        };
+      } catch (e) {
+        print('解析plan数组失败: $e');
+        
+        // 如果解析失败，尝试手动提取训练日信息
+        List<Map<String, dynamic>> manualPlan = [];
+        
+        // 查找所有的date字段
+        int dateIndex = 0;
+        while (true) {
+          int datePos = response.indexOf('"date"', dateIndex);
+          if (datePos == -1) break;
+          
+          // 提取date值
+          int dateValueStart = response.indexOf(':', datePos);
+          if (dateValueStart == -1) break;
+          dateValueStart = response.indexOf('"', dateValueStart);
+          if (dateValueStart == -1) break;
+          int dateValueEnd = response.indexOf('"', dateValueStart + 1);
+          if (dateValueEnd == -1) break;
+          
+          String dateValue = response.substring(dateValueStart + 1, dateValueEnd);
+          print('找到训练日期: $dateValue');
+          
+          // 查找exercises数组
+          int exercisesPos = response.indexOf('"exercises"', dateValueEnd);
+          if (exercisesPos != -1) {
+            int exArrayStart = response.indexOf('[', exercisesPos);
+            if (exArrayStart != -1) {
+              int exBracketCount = 0;
+              int exArrayEnd = -1;
+              for (int i = exArrayStart; i < response.length && i < exArrayStart + 5000; i++) {
+                if (response[i] == '[') {
+                  exBracketCount++;
+                } else if (response[i] == ']') {
+                  exBracketCount--;
+                  if (exBracketCount == 0) {
+                    exArrayEnd = i + 1;
+                    break;
+                  }
+                }
+              }
+              
+              if (exArrayEnd != -1) {
+                String exercisesStr = response.substring(exArrayStart, exArrayEnd);
+                try {
+                  List<dynamic> exercises = jsonDecode(exercisesStr);
+                  manualPlan.add({
+                    'date': dateValue,
+                    'exercises': exercises
+                  });
+                  print('成功提取${exercises.length}个训练项目');
+                } catch (exE) {
+                  print('解析exercises失败: $exE');
+                  manualPlan.add({
+                    'date': dateValue,
+                    'exercises': []
+                  });
+                }
+              }
+            }
+          }
+          
+          dateIndex = dateValueEnd + 1;
+          if (manualPlan.length >= 7) break; // 最多提取7天
+        }
+        
+        if (manualPlan.isNotEmpty) {
+          print('手动提取了${manualPlan.length}个训练日');
+          return {
+            'plan': manualPlan,
+            'summary': '从AI响应中提取的训练计划'
+          };
+        }
+        
+        return null;
+      }
+    } catch (e) {
+      print('宽松模式提取失败: $e');
+      return null;
     }
   }
 
@@ -1077,58 +1385,178 @@ class _SmartAgentPageState extends State<SmartAgentPage> {
         detailedPrompt += '- 卡路里：${postureData['calories'] ?? 0}\n';
         detailedPrompt += '- 距离：${postureData['distance'] ?? 0}km\n';
         detailedPrompt += '- 活动时间：${postureData['active_time'] ?? 0}min\n';
+        
+        // 添加活动趋势数据
+          if (postureData['activity_trend'] != null) {
+            detailedPrompt += '\n每周活动趋势：\n';
+            for (var item in postureData['activity_trend']) {
+              detailedPrompt += '- ${item['label']}：${item['steps']}步\n';
+            }
+          }
+          
+          // 添加姿态详细数据
+          if (postureData['postures'] != null) {
+            detailedPrompt += '\n姿态详细数据：\n';
+            for (var item in postureData['postures']) {
+              detailedPrompt += '- ${item['date'] ?? item['label']}：\n';
+              if (item['sitting'] != null) detailedPrompt += '  坐姿：${item['sitting']}小时\n';
+              if (item['standing'] != null) detailedPrompt += '  站姿：${item['standing']}小时\n';
+              if (item['walking'] != null) detailedPrompt += '  行走：${item['walking']}小时\n';
+              if (item['running'] != null) detailedPrompt += '  跑步：${item['running']}小时\n';
+              if (item['lying'] != null) detailedPrompt += '  躺姿：${item['lying']}小时\n';
+            }
+          }
+          
+          // 添加姿态角度数据
+          if (postureData['posture_angles'] != null) {
+            detailedPrompt += '\n姿态角度数据：\n';
+            // 添加年龄组定义
+            detailedPrompt += '年龄组定义：\n';
+            detailedPrompt += '- 青年组：11-24岁\n';
+            detailedPrompt += '- 壮年组：25-44岁\n';
+            detailedPrompt += '- 中年组：45-59岁\n';
+            detailedPrompt += '- 老年组：60岁及以上\n\n';
+            // 添加角度范围定义
+            detailedPrompt += '角度范围定义：\n';
+            detailedPrompt += '- 正常：标准范围内的角度\n';
+            detailedPrompt += '- 轻微异常：偏离标准范围中点的偏差≤10度（老年组≤12度）\n';
+            detailedPrompt += '- 严重异常：偏离标准范围中点的偏差>10度（老年组>12度）\n\n';
+            for (var item in postureData['posture_angles']) {
+              detailedPrompt += '- ${item['time'] ?? item['date'] ?? item['week'] ?? item['label']}：\n';
+              if (item['angle'] != null) detailedPrompt += '  前俯角：${item['angle']}\n';
+              if (item['status'] != null) detailedPrompt += '  状态：${item['status']}\n';
+              if (item['normal'] != null) detailedPrompt += '  正常：${item['normal']}小时\n';
+              if (item['mild'] != null) detailedPrompt += '  轻微异常：${item['mild']}小时\n';
+              if (item['severe'] != null) detailedPrompt += '  严重异常：${item['severe']}小时\n';
+            }
+          }
       }
 
+      // 直接让大模型捕捉当前日期
+      
       detailedPrompt += '\n请根据上述数据生成未来一周的详细训练安排，要求：\n';
-      detailedPrompt += '- 生成从今天开始的未来7天的训练计划\n';
+      detailedPrompt += '- 生成从今天开始的未来7天（包括今天）的训练计划\n';
+      detailedPrompt += '- 请自动捕捉当前日期，从今天开始连续生成7天的计划\n';
+      detailedPrompt += '- 每天必须包含具体的日期（YYYY-MM-DD格式）\n';
       detailedPrompt += '- 每天的具体训练时间（开始时间和结束时间）\n';
       detailedPrompt += '- 具体的运动项目和训练内容\n';
       detailedPrompt += '- 训练强度和时长\n';
       detailedPrompt += '- 考虑我的姿态习惯，帮助改善不良姿态\n';
       detailedPrompt += '- 考虑我的健康状况和身体条件，避免过度训练\n';
       detailedPrompt += '\n重要：请只输出JSON格式的训练计划，不要包含任何其他文字说明或分析内容。\n';
-      
-      // 获取当前日期
-      final now = DateTime.now();
-      
-      // 计算未来7天的日期和星期
-      final dates = <String>[];
-      final weekDays = <String>[];
-      final weekDayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-      
-      for (int i = 0; i < 7; i++) {
-        final date = now.add(Duration(days: i));
-        final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-        dates.add(dateStr);
-        
-        // 获取实际的星期几（1=周一，7=周日）
-        final weekday = date.weekday;
-        weekDays.add(weekDayNames[weekday - 1]);
-      }
-      
+      detailedPrompt += '今天是{{ $json.body.current_date }}\n';
       detailedPrompt += '\nJSON格式要求：\n';
+      detailedPrompt += '- 只输出完整的JSON对象，不要有任何前缀或后缀文字\n';
+      detailedPrompt += '- 确保所有字段名和字符串值都用双引号包围\n';
+      detailedPrompt += '- 确保所有逗号、冒号等标点符号都是英文半角\n';
+      detailedPrompt += '- 确保JSON格式完全正确，可直接被JSON解析器解析\n';
+      detailedPrompt += '- 只包含plan数组，每个元素包含date和exercises字段\n';
+      detailedPrompt += '- exercises数组中的每个元素必须包含name、start_time、end_time、intensity、duration、description字段\n';
+
+      detailedPrompt += '\n示例JSON格式：\n';
       detailedPrompt += '{\n';
       detailedPrompt += '  "plan": [\n';
-      for (int i = 0; i < 7; i++) {
-        detailedPrompt += '    {\n';
-        detailedPrompt += '      "day": "${weekDays[i]}",\n';
-        detailedPrompt += '      "date": "${dates[i]}",\n';
-        detailedPrompt += '      "exercises": [\n';
-        detailedPrompt += '        {\n';
-        detailedPrompt += '          "name": "运动项目名称",\n';
-        detailedPrompt += '          "start_time": "08:00",\n';
-        detailedPrompt += '          "end_time": "08:30",\n';
-        detailedPrompt += '          "intensity": "中等",\n';
-        detailedPrompt += '          "duration": "30分钟",\n';
-        detailedPrompt += '          "description": "运动项目描述"\n';
-        detailedPrompt += '        }\n';
-        detailedPrompt += '      ]\n';
-        detailedPrompt += '    }${i < 6 ? ',' : ''}\n';
-      }
+      detailedPrompt += '    {\n';
+      detailedPrompt += '      "date": "YYYY-MM-DD", // 例如：2024-01-01\n';
+      detailedPrompt += '      "exercises": [\n';
+      detailedPrompt += '        {\n';
+      detailedPrompt += '          "name": "运动项目名称",\n';
+      detailedPrompt += '          "start_time": "08:00",\n';
+      detailedPrompt += '          "end_time": "08:30",\n';
+      detailedPrompt += '          "intensity": "中等",\n';
+      detailedPrompt += '          "duration": "30分钟",\n';
+      detailedPrompt += '          "description": "运动项目描述"\n';
+      detailedPrompt += '        }\n';
+      detailedPrompt += '      ]\n';
+      detailedPrompt += '    },\n';
+      detailedPrompt += '    {\n';
+      detailedPrompt += '\n';
+      detailedPrompt += '      "date": "YYYY-MM-DD",\n';
+      detailedPrompt += '      "exercises": [\n';
+      detailedPrompt += '        {\n';
+      detailedPrompt += '          "name": "运动项目名称",\n';
+      detailedPrompt += '          "start_time": "08:00",\n';
+      detailedPrompt += '          "end_time": "08:30",\n';
+      detailedPrompt += '          "intensity": "中等",\n';
+      detailedPrompt += '          "duration": "30分钟",\n';
+      detailedPrompt += '          "description": "运动项目描述"\n';
+      detailedPrompt += '        }\n';
+      detailedPrompt += '      ]\n';
+      detailedPrompt += '    },\n';
+      detailedPrompt += '    {\n';
+      detailedPrompt += '\n';
+      detailedPrompt += '      "date": "YYYY-MM-DD",\n';
+      detailedPrompt += '      "exercises": [\n';
+      detailedPrompt += '        {\n';
+      detailedPrompt += '          "name": "运动项目名称",\n';
+      detailedPrompt += '          "start_time": "08:00",\n';
+      detailedPrompt += '          "end_time": "08:30",\n';
+      detailedPrompt += '          "intensity": "中等",\n';
+      detailedPrompt += '          "duration": "30分钟",\n';
+      detailedPrompt += '          "description": "运动项目描述"\n';
+      detailedPrompt += '        }\n';
+      detailedPrompt += '      ]\n';
+      detailedPrompt += '    },\n';
+      detailedPrompt += '    {\n';
+      detailedPrompt += '\n';
+      detailedPrompt += '      "date": "YYYY-MM-DD",\n';
+      detailedPrompt += '      "exercises": [\n';
+      detailedPrompt += '        {\n';
+      detailedPrompt += '          "name": "运动项目名称",\n';
+      detailedPrompt += '          "start_time": "08:00",\n';
+      detailedPrompt += '          "end_time": "08:30",\n';
+      detailedPrompt += '          "intensity": "中等",\n';
+      detailedPrompt += '          "duration": "30分钟",\n';
+      detailedPrompt += '          "description": "运动项目描述"\n';
+      detailedPrompt += '        }\n';
+      detailedPrompt += '      ]\n';
+      detailedPrompt += '    },\n';
+      detailedPrompt += '    {\n';
+      detailedPrompt += '\n';
+      detailedPrompt += '      "date": "YYYY-MM-DD",\n';
+      detailedPrompt += '      "exercises": [\n';
+      detailedPrompt += '        {\n';
+      detailedPrompt += '          "name": "运动项目名称",\n';
+      detailedPrompt += '          "start_time": "08:00",\n';
+      detailedPrompt += '          "end_time": "08:30",\n';
+      detailedPrompt += '          "intensity": "中等",\n';
+      detailedPrompt += '          "duration": "30分钟",\n';
+      detailedPrompt += '          "description": "运动项目描述"\n';
+      detailedPrompt += '        }\n';
+      detailedPrompt += '      ]\n';
+      detailedPrompt += '    },\n';
+      detailedPrompt += '    {\n';
+      detailedPrompt += '\n';
+      detailedPrompt += '      "date": "YYYY-MM-DD",\n';
+      detailedPrompt += '      "exercises": [\n';
+      detailedPrompt += '        {\n';
+      detailedPrompt += '          "name": "运动项目名称",\n';
+      detailedPrompt += '          "start_time": "08:00",\n';
+      detailedPrompt += '          "end_time": "08:30",\n';
+      detailedPrompt += '          "intensity": "中等",\n';
+      detailedPrompt += '          "duration": "30分钟",\n';
+      detailedPrompt += '          "description": "运动项目描述"\n';
+      detailedPrompt += '        }\n';
+      detailedPrompt += '      ]\n';
+      detailedPrompt += '    },\n';
+      detailedPrompt += '    {\n';
+      detailedPrompt += '\n';
+      detailedPrompt += '      "date": "YYYY-MM-DD",\n';
+      detailedPrompt += '      "exercises": [\n';
+      detailedPrompt += '        {\n';
+      detailedPrompt += '          "name": "运动项目名称",\n';
+      detailedPrompt += '          "start_time": "08:00",\n';
+      detailedPrompt += '          "end_time": "08:30",\n';
+      detailedPrompt += '          "intensity": "中等",\n';
+      detailedPrompt += '          "duration": "30分钟",\n';
+      detailedPrompt += '          "description": "运动项目描述"\n';
+      detailedPrompt += '        }\n';
+      detailedPrompt += '      ]\n';
+      detailedPrompt += '    }\n';
       detailedPrompt += '  ],\n';
       detailedPrompt += '  "summary": "整体训练计划总结"\n';
       detailedPrompt += '}\n';
-      detailedPrompt += '\n请严格按照上述JSON格式输出，只返回JSON数据，不要包含任何其他文字。';
+      detailedPrompt += '\n请严格按照上述JSON格式输出，从今天开始连续生成7天的计划，只返回JSON数据，不要包含任何其他文字。今天是日期请参考提示词';
 
       // 调用N8N处理消息
       await _processMessageWithN8N(detailedPrompt);
@@ -1151,21 +1579,271 @@ class _SmartAgentPageState extends State<SmartAgentPage> {
     }
   }
 
+  // 发送健康餐馆推荐请求
+  Future<void> _sendHealthyRestaurantRequest() async {
+    if (_userId == null) {
+      if (mounted) {
+        setState(() {
+          _messages.add(Message(
+            text: '请先登录后再使用智能服务',
+            isUser: false,
+            timestamp: DateTime.now(),
+          ));
+        });
+      }
+      _saveMessages();
+      _scrollToBottom();
+      return;
+    }
 
-  
+    // 显示用户输入的消息
+    setState(() {
+      _messages.add(Message(
+        text: '推荐健康餐馆',
+        isUser: true,
+        timestamp: DateTime.now(),
+      ));
+      // 添加一个加载中的消息
+      _messages.add(Message(
+        text: '',
+        isUser: false,
+        timestamp: DateTime.now(),
+        isLoading: true,
+      ));
+      _textController.clear();
+    });
 
+    // 保存消息
+    _saveMessages();
+    
+    // 滚动到底部
+    _scrollToBottom();
 
+    try {
+      // 获取用户信息和姿态数据
+      final userInfo = await _getUserInfo();
+      final postureData = await _getPostureDistribution();
 
+      // 构建详细的提示词
+      String detailedPrompt = '请为我推荐附近的健康餐馆\n';
 
+      // 添加用户基本信息
+      if (userInfo != null) {
+        detailedPrompt += '\n用户基本信息：\n';
+        detailedPrompt += '- 年龄：${userInfo['age'] ?? '未知'}岁\n';
+        detailedPrompt += '- 体重：${userInfo['weight'] ?? '未知'}kg\n';
+        detailedPrompt += '- 身高：${userInfo['height'] ?? '未知'}cm\n';
+        detailedPrompt += '- 身份：${userInfo['identity'] ?? '未知'}\n';
+        if (userInfo['ills'] != null && userInfo['ills'].toString().isNotEmpty) {
+          detailedPrompt += '- 健康状况：${userInfo['ills']}\n';
+        }
+      }
 
+      // 添加姿态占比数据
+      if (postureData != null) {
+        detailedPrompt += '\n近一个月姿态占比：\n';
+        if (postureData['posture_distribution'] != null) {
+          for (var item in postureData['posture_distribution']) {
+            detailedPrompt += '- ${item['name']}：${item['value']}% (${item['hours']})\n';
+          }
+        }
+        detailedPrompt += '\n活动数据：\n';
+        detailedPrompt += '- 步数：${postureData['steps'] ?? 0}\n';
+        detailedPrompt += '- 卡路里：${postureData['calories'] ?? 0}\n';
+        detailedPrompt += '- 距离：${postureData['distance'] ?? 0}km\n';
+        detailedPrompt += '- 活动时间：${postureData['active_time'] ?? 0}min\n';
+        
+        // 添加活动趋势数据
+          if (postureData['activity_trend'] != null) {
+            detailedPrompt += '\n每周活动趋势：\n';
+            for (var item in postureData['activity_trend']) {
+              detailedPrompt += '- ${item['label']}：${item['steps']}步\n';
+            }
+          }
+          
+          // 添加姿态详细数据
+          if (postureData['postures'] != null) {
+            detailedPrompt += '\n姿态详细数据：\n';
+            for (var item in postureData['postures']) {
+              detailedPrompt += '- ${item['date'] ?? item['label']}：\n';
+              if (item['sitting'] != null) detailedPrompt += '  坐姿：${item['sitting']}小时\n';
+              if (item['standing'] != null) detailedPrompt += '  站姿：${item['standing']}小时\n';
+              if (item['walking'] != null) detailedPrompt += '  行走：${item['walking']}小时\n';
+              if (item['running'] != null) detailedPrompt += '  跑步：${item['running']}小时\n';
+              if (item['lying'] != null) detailedPrompt += '  躺姿：${item['lying']}小时\n';
+            }
+          }
+          
+          // 添加姿态角度数据
+          if (postureData['posture_angles'] != null) {
+            detailedPrompt += '\n姿态角度数据：\n';
+            // 添加年龄组定义
+            detailedPrompt += '年龄组定义：\n';
+            detailedPrompt += '- 青年组：11-24岁\n';
+            detailedPrompt += '- 壮年组：25-44岁\n';
+            detailedPrompt += '- 中年组：45-59岁\n';
+            detailedPrompt += '- 老年组：60岁及以上\n\n';
+            // 添加角度范围定义
+            detailedPrompt += '角度范围定义：\n';
+            detailedPrompt += '- 正常：标准范围内的角度\n';
+            detailedPrompt += '- 轻微异常：偏离标准范围中点的偏差≤10度（老年组≤12度）\n';
+            detailedPrompt += '- 严重异常：偏离标准范围中点的偏差>10度（老年组>12度）\n\n';
+            for (var item in postureData['posture_angles']) {
+              detailedPrompt += '- ${item['time'] ?? item['date'] ?? item['week'] ?? item['label']}：\n';
+              if (item['angle'] != null) detailedPrompt += '  前俯角：${item['angle']}\n';
+              if (item['status'] != null) detailedPrompt += '  状态：${item['status']}\n';
+              if (item['normal'] != null) detailedPrompt += '  正常：${item['normal']}小时\n';
+              if (item['mild'] != null) detailedPrompt += '  轻微异常：${item['mild']}小时\n';
+              if (item['severe'] != null) detailedPrompt += '  严重异常：${item['severe']}小时\n';
+            }
+          }
+      }
 
+      detailedPrompt += '\n请根据上述数据推荐适合我的健康餐馆，要求：\n';
+      detailedPrompt += '- 考虑我的年龄、体重、身高等身体状况\n';
+      detailedPrompt += '- 结合我的活动量和姿态习惯\n';
+      detailedPrompt += '- 如果有健康状况，推荐适合的餐饮类型\n';
+      detailedPrompt += '- 优先推荐：轻食、沙拉、高蛋白、低脂、有机等健康餐饮\n';
+      detailedPrompt += '- 排除：快餐、油炸、高糖、高盐等不健康餐饮\n';
+      detailedPrompt += '- 给出具体的推荐理由和营养价值分析\n';
+      detailedPrompt += '- 按健康度和距离综合排序\n';
+      detailedPrompt += '- 推荐3-5家餐馆\n';
 
+      // 调用N8N处理消息（使用特殊类型标记为健康餐馆请求）
+      await _processHealthyRestaurantRequest(detailedPrompt);
+    } catch (e) {
+      print('发送健康餐馆请求失败: $e');
+      if (mounted) {
+        setState(() {
+          // 移除加载中的消息
+          _messages.removeWhere((message) => message.isLoading);
+          // 添加错误消息
+          _messages.add(Message(
+            text: '获取健康餐馆推荐失败，请稍后再试',
+            isUser: false,
+            timestamp: DateTime.now(),
+          ));
+        });
+      }
+      _saveMessages();
+      _scrollToBottom();
+    }
+  }
 
-
-
-
-
-
+  // 处理健康餐馆请求（发送到后端）
+  Future<void> _processHealthyRestaurantRequest(String messageText) async {
+    if (_userId == null) {
+      if (mounted) {
+        setState(() {
+          _messages.add(Message(
+            text: '请先登录后再使用智能服务',
+            isUser: false,
+            timestamp: DateTime.now(),
+          ));
+        });
+      }
+      _saveMessages();
+      _scrollToBottom();
+      return;
+    }
+    
+    try {
+      // 获取用户信息
+      final userInfo = await _getUserInfo();
+      // 获取姿态占比数据
+      final postureData = await _getPostureDistribution();
+      // 获取用户位置
+      final location = await _getCurrentLocation();
+      
+      print('开始调用健康餐馆推荐API');
+      print('API URL: ${ApiConfig.n8nUrl}');
+      print('用户位置: 纬度=${location?['latitude']}, 经度=${location?['longitude']}');
+      
+      final response = await http.post(
+        Uri.parse(ApiConfig.n8nUrl),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'user_id': _userId,
+          'message': messageText,
+          'session_id': _sessionId,
+          'type': 'healthy_restaurant', // 特殊类型标记
+          'user_info': userInfo,
+          'posture_data': postureData,
+          'latitude': location?['latitude'],
+          'longitude': location?['longitude'],
+        }),
+      );
+      
+      print('API响应状态码: ${response.statusCode}');
+      print('API响应内容: ${response.body}');
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('解析后的响应数据: $data');
+        String aiResponse = data['response'] ?? '抱歉，无法获取餐馆推荐，请稍后再试。';
+        
+        // 过滤AI思考过程，只保留实际内容
+        aiResponse = _filterThinkingProcess(aiResponse);
+        
+        if (mounted) {
+          setState(() {
+            // 移除加载中的消息
+            _messages.removeWhere((message) => message.isLoading);
+            // 添加实际的回复消息
+            _messages.add(Message(
+              text: aiResponse,
+              isUser: false,
+              timestamp: DateTime.now(),
+            ));
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            // 移除加载中的消息
+            _messages.removeWhere((message) => message.isLoading);
+            // 解析错误信息
+            String errorMessage = '抱歉，服务暂时不可用，请稍后再试';
+            try {
+              final errorData = jsonDecode(response.body);
+              if (errorData.containsKey('error')) {
+                errorMessage = errorData['error'];
+              }
+            } catch (e) {
+              print('解析错误信息失败: $e');
+            }
+            // 添加错误消息
+            _messages.add(Message(
+              text: errorMessage,
+              isUser: false,
+              timestamp: DateTime.now(),
+            ));
+          });
+        }
+      }
+    } catch (e) {
+      print('调用API失败: $e');
+      if (mounted) {
+        setState(() {
+          // 移除加载中的消息
+          _messages.removeWhere((message) => message.isLoading);
+          // 添加错误消息
+          _messages.add(Message(
+            text: '网络错误，请检查网络连接后再试',
+            isUser: false,
+            timestamp: DateTime.now(),
+          ));
+        });
+      }
+    } finally {
+      // 保存消息
+      _saveMessages();
+      // 滚动到底部
+      _scrollToBottom();
+    }
+  }
 
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1491,8 +2169,7 @@ class _SmartAgentPageState extends State<SmartAgentPage> {
                       ),
                       GestureDetector(
                         onTap: () {
-                          _textController.text = '推荐健康餐馆';
-                          _sendMessage();
+                          _sendHealthyRestaurantRequest();
                         },
                         child: Container(
                           margin: const EdgeInsets.symmetric(horizontal: 8),
@@ -1507,28 +2184,6 @@ class _SmartAgentPageState extends State<SmartAgentPage> {
                               const Icon(Icons.restaurant, size: 14, color: Colors.black),
                               const SizedBox(width: 6),
                               const Text('健康餐馆', style: TextStyle(fontSize: 12, color: Colors.black)),
-                            ],
-                          ),
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () {
-                          _textController.text = '小红书分享';
-                          _sendMessage();
-                        },
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 8),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            border: Border.all(color: Color(0xFF39FF14), width: 1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.share, size: 14, color: Colors.black),
-                              const SizedBox(width: 6),
-                              const Text('小红书分享', style: TextStyle(fontSize: 12, color: Colors.black)),
                             ],
                           ),
                         ),
@@ -1592,6 +2247,147 @@ class _SmartAgentPageState extends State<SmartAgentPage> {
         ],
       ),
     );
+  }
+
+  // 从AI响应中检测是否包含训练计划JSON
+  Map<String, dynamic> _extractAndFixTrainingPlan(String aiResponse) {
+    try {
+      print('开始检测训练计划...');
+      print('原始AI响应长度: ${aiResponse.length}');
+      
+      // 清理响应内容，移除多余的空白字符和换行
+      String cleanedResponse = aiResponse.trim();
+      
+      // 尝试找到JSON对象的开始
+      int startIndex = cleanedResponse.indexOf('{');
+      if (startIndex == -1) {
+        print('未找到JSON开始标记');
+        return {'hasTrainingPlan': false, 'fixedResponse': aiResponse};
+      }
+      
+      // 找到匹配的结束括号
+      int braceCount = 0;
+      int endIndex = -1;
+      for (int i = startIndex; i < cleanedResponse.length; i++) {
+        if (cleanedResponse[i] == '{') {
+          braceCount++;
+        } else if (cleanedResponse[i] == '}') {
+          braceCount--;
+          // 防止braceCount变为负数（处理多余的右括号）
+          if (braceCount < 0) {
+            braceCount = 0;
+            continue; // 跳过这个多余的右括号，继续寻找
+          }
+          if (braceCount == 0) {
+            endIndex = i + 1;
+            break;
+          }
+        }
+      }
+      
+      if (endIndex == -1) {
+        print('未找到JSON结束标记');
+        return {'hasTrainingPlan': false, 'fixedResponse': aiResponse};
+      }
+      
+      final jsonString = cleanedResponse.substring(startIndex, endIndex);
+      print('提取的JSON字符串长度: ${jsonString.length}');
+      
+      String sanitizedJson = jsonString;
+      try {
+        // 清理JSON字符串中的非法字符
+        sanitizedJson = jsonString
+            .replaceAll('\u0000', '')
+            .replaceAll('\u0001', '')
+            .replaceAll('\u0002', '')
+            .replaceAll('\u0003', '')
+            .replaceAll('\u0004', '')
+            .replaceAll('\u0005', '')
+            .replaceAll('\u0006', '')
+            .replaceAll('\u0007', '')
+            .replaceAll('\u0008', '')
+            .replaceAll('\u0009', ' ')
+            .replaceAll('\u000a', ' ')
+            .replaceAll('\u000b', ' ')
+            .replaceAll('\u000c', ' ')
+            .replaceAll('\u000d', ' ')
+            .replaceAll('\u000e', '')
+            .replaceAll('\u000f', '')
+            .replaceAll('\u0010', '')
+            .replaceAll('\u0011', '')
+            .replaceAll('\u0012', '')
+            .replaceAll('\u0013', '')
+            .replaceAll('\u0014', '')
+            .replaceAll('\u0015', '')
+            .replaceAll('\u0016', '')
+            .replaceAll('\u0017', '')
+            .replaceAll('\u0018', '')
+            .replaceAll('\u0019', '')
+            .replaceAll('\u001a', '')
+            .replaceAll('\u001b', '')
+            .replaceAll('\u001c', '')
+            .replaceAll('\u001d', '')
+            .replaceAll('\u001e', '')
+            .replaceAll('\u001f', '');
+        
+        // 尝试修复常见的JSON格式问题
+        sanitizedJson = sanitizedJson
+            .replaceAll('，', ',')
+            .replaceAll('。', '.')
+            .replaceAll('；', ';')
+            .replaceAll('：', ':')
+            .replaceAll('"', '"')
+            .replaceAll('"', '"')
+            .replaceAll("'", "'")
+            .replaceAll("'", "'");
+        
+        // 修复未闭合的引号问题
+        sanitizedJson = _fixUnclosedQuotes(sanitizedJson);
+        print('清理后的JSON字符串: $sanitizedJson');
+        
+        final trainingPlan = jsonDecode(sanitizedJson);
+        print('解析后的训练计划: $trainingPlan');
+        
+        // 验证训练计划格式
+        if (trainingPlan is Map && 
+            trainingPlan.containsKey('plan') && 
+            trainingPlan['plan'] is List) {
+          print('检测到训练计划');
+          // 返回原始响应，不进行修改
+          return {'hasTrainingPlan': true, 'fixedResponse': aiResponse};
+        } else {
+          print('训练计划格式不正确');
+          print('trainingPlan类型: ${trainingPlan.runtimeType}');
+          print('是否包含plan字段: ${trainingPlan is Map && trainingPlan.containsKey('plan')}');
+          if (trainingPlan is Map && trainingPlan.containsKey('plan')) {
+            print('plan字段类型: ${trainingPlan['plan'].runtimeType}');
+          }
+          return {'hasTrainingPlan': false, 'fixedResponse': aiResponse};
+        }
+      } catch (jsonError) {
+        print('JSON解析失败: $jsonError');
+        print('原始JSON字符串: $jsonString');
+        print('清理后的JSON字符串: $sanitizedJson');
+        print('错误类型: ${jsonError.runtimeType}');
+        
+        // 尝试使用更宽松的解析方式
+        try {
+          // 简化验证，只要有plan字段就认为是训练计划
+          if (jsonString.contains('"plan"') || jsonString.contains("'plan'")) {
+            print('检测到包含plan字段的JSON');
+            // 返回原始响应，不进行修改
+            return {'hasTrainingPlan': true, 'fixedResponse': aiResponse};
+          }
+        } catch (e) {
+          print('简化验证也失败: $e');
+        }
+        return {'hasTrainingPlan': false, 'fixedResponse': aiResponse};
+      }
+    } catch (e) {
+      print('检测训练计划失败: $e');
+      print('错误详情: ${e.toString()}');
+      return {'hasTrainingPlan': false, 'fixedResponse': aiResponse};
+    }
   }
 
   Widget _buildTextInput() {

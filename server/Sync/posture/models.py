@@ -28,6 +28,7 @@ class User(models.Model):
     identity = models.CharField(max_length=30, blank=True, null=True)
     age = models.IntegerField()
     age_group = models.CharField(max_length=10, choices=[(ag.value, ag.value) for ag in AgeGroup])
+    gender = models.CharField(max_length=10, choices=[('male', '男'), ('female', '女'), ('other', '保密')])
     weight = models.FloatField()
     height = models.FloatField()
     ills = models.TextField(blank=True, null=True)

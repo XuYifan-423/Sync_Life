@@ -529,7 +529,7 @@ class _BodyMovementPageState extends State<BodyMovementPage> {
                       ),
                       SizedBox(height: 8),
                       const Text(
-                        '点击按钮生成相应报告，报告将通过智能体服务发送给您',
+                        '点击按钮生成相应报告（支持小红书分享），报告将通过智能体服务发送给您',
                         style: TextStyle(fontSize: 12, color: Color(0xFF757575)),
                         textAlign: TextAlign.center,
                       ),

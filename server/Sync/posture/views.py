@@ -800,6 +800,7 @@ def update_user_info(request):
             phone = data.get('phone')
             email = data.get('email')
             age = data.get('age')
+            gender = data.get('gender')
             height = data.get('height')
             weight = data.get('weight')
             identity = data.get('identity')
@@ -821,6 +822,8 @@ def update_user_info(request):
                 user.email = email
             if age is not None:
                 user.age = age
+            if gender is not None:
+                user.gender = gender
             if height is not None:
                 user.height = height
             if weight is not None:
@@ -840,6 +843,7 @@ def update_user_info(request):
                 'phone': user.phone,
                 'email': user.email,
                 'age': user.age,
+                'gender': user.gender,
                 'height': user.height,
                 'weight': user.weight,
                 'identity': user.identity,
@@ -877,6 +881,7 @@ def get_user_info(request):
                 'phone': user.phone,
                 'email': user.email,
                 'age': user.age,
+                'gender': user.gender,
                 'height': user.height,
                 'weight': user.weight,
                 'identity': user.identity,
@@ -905,13 +910,36 @@ def process_with_n8n(request):
             if not user_id or not message:
                 return JsonResponse({'error': 'Missing required fields'}, status=400)
             
+            # 获取今天的日期和星期信息
+            now = timezone.now()
+            today_date = now.strftime('%Y-%m-%d')
+            weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+            today_weekday = weekdays[now.weekday()]
+            
             # 准备发送给N8N的数据
             n8n_data = {
                 'user_id': user_id,
                 'message': message,
                 'session_id': session_id,
-                'type': type
+                'type': type,
+                'current_date': today_date,  # 今天的日期，格式：YYYY-MM-DD
+                'current_weekday': today_weekday  # 今天的星期几，如：周一、周二等
             }
+            
+            # 如果是健康餐馆请求，添加额外数据
+            if type == 'healthy_restaurant':
+                user_info = data.get('user_info')
+                posture_data = data.get('posture_data')
+                latitude = data.get('latitude')
+                longitude = data.get('longitude')
+                
+                if user_info:
+                    n8n_data['user_info'] = user_info
+                if posture_data:
+                    n8n_data['posture_data'] = posture_data
+                # 始终添加经纬度字段（即使为null）
+                n8n_data['latitude'] = latitude
+                n8n_data['longitude'] = longitude
             
             # 调用N8N工作流
             try:
@@ -1455,3 +1483,5 @@ def process_bluetooth_data(request):
             return JsonResponse({'error': str(e)}, status=500)
     else:
         return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+
